@@ -1,8 +1,9 @@
-import { Router, Request, Response } from "express";
+import { Router, Response, RequestHandler } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { requireAuth } from "../middleware/auth";
 
 const router = Router();
+router.use(requireAuth as RequestHandler);
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY ?? "");
 
@@ -18,8 +19,8 @@ Your role:
 Tone: warm, clear, supportive. Never robotic or overly formal.
 Limit responses to 3-4 short paragraphs or equivalent bullet points unless the topic genuinely requires more depth.`;
 
-router.post("/", requireAuth, async (req: Request, res: Response): Promise<void> => {
-  const { messages } = req.body as {
+router.post("/", (async (req, res: Response): Promise<void> => {
+  const { messages } = req.body as unknown as {
     messages: { role: "user" | "assistant"; content: string }[];
   };
 
@@ -34,7 +35,6 @@ router.post("/", requireAuth, async (req: Request, res: Response): Promise<void>
       systemInstruction: SYSTEM_PROMPT,
     });
 
-    // Convert messages to Gemini history format (all except the last user message)
     const history = messages.slice(0, -1).map(m => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
@@ -52,6 +52,6 @@ router.post("/", requireAuth, async (req: Request, res: Response): Promise<void>
     const msg = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: msg });
   }
-});
+}) as RequestHandler);
 
 export default router;
