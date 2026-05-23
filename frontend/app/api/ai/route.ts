@@ -1,51 +1,115 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const SYSTEM_PROMPT = `You are TaskZen, an expert AI Study Assistant integrated into a Pomodoro productivity app. Your role is to:
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-1. Create personalized study plans and schedules
-2. Explain complex topics in simple, clear language
-3. Provide productivity coaching and study techniques
-4. Offer motivational support and encouragement
-5. Help with focus, concentration, and distraction management
-6. Give evidence-based study tips (spaced repetition, active recall, etc.)
-7. Analyze study habits and suggest improvements
+const SYSTEM_PROMPT = `You are TaskZen's AI Study Assistant — a friendly, knowledgeable tutor and productivity coach for students.
 
-Tone: Friendly, encouraging, and professional. Keep responses concise but helpful (2-4 paragraphs max unless a detailed plan is requested). Use bullet points and structure when appropriate. Always end with a motivational nudge.`;
+Your role:
+- Help students with studying, explaining difficult concepts, and creating study plans
+- Give productivity and focus tips tailored to students
+- Motivate and encourage without being over the top
+- Answer academic questions across all subjects (math, science, history, coding, languages, etc.)
+- Keep responses concise and scannable — use bullet points or short paragraphs when helpful
 
-export async function POST(req: NextRequest) {
-  if (!process.env.GEMINI_API_KEY) {
-    return NextResponse.json({
-      content:
-        "Gemini API key not configured. Add GEMINI_API_KEY to your .env.local file — it's free at https://aistudio.google.com/",
+Tone: warm, clear, supportive. Limit responses to 3-4 paragraphs or equivalent bullet points.`;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function callGemini(
+  apiKey: string,
+  body: object,
+  retries = 2
+): Promise<{ ok: true; text: string } | { ok: false; status: number; message: string }> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
+
+    if (res.ok) {
+      const data = await res.json();
+      const text: string =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "No response from Gemini.";
+      return { ok: true, text };
+    }
+
+    // 429 — rate limited: wait and retry
+    if (res.status === 429 && attempt < retries) {
+      const waitMs = (attempt + 1) * 3000; // 3s, 6s
+      console.warn(`[Gemini] Rate limited, retrying in ${waitMs}ms (attempt ${attempt + 1})`);
+      await sleep(waitMs);
+      continue;
+    }
+
+    const err = await res.json().catch(() => ({ error: { message: res.statusText } }));
+    return {
+      ok: false,
+      status: res.status,
+      message: err?.error?.message ?? res.statusText,
+    };
   }
 
+  return { ok: false, status: 429, message: "Rate limit exceeded after retries." };
+}
+
+export async function POST(req: NextRequest) {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "GEMINI_API_KEY not configured in .env.local" },
+      { status: 500 }
+    );
+  }
+
+  let messages: { role: "user" | "assistant"; content: string }[];
   try {
-    const { messages } = await req.json();
+    ({ messages } = await req.json());
+    if (!Array.isArray(messages) || messages.length === 0) throw new Error("invalid");
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      systemInstruction: SYSTEM_PROMPT,
-    });
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
 
-    // Convert message history for Gemini (roles: "user" | "model")
-    const history = messages.slice(0, -1).map((m: { role: string; content: string }) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
+  const body = {
+    system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+    contents,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 1024,
+    },
+  };
 
-    const lastMessage = messages[messages.length - 1];
+  try {
+    const result = await callGemini(apiKey, body);
 
-    const chat = model.startChat({ history });
-    const result = await chat.sendMessage(lastMessage.content);
-    const content = result.response.text();
+    if (result.ok) {
+      return NextResponse.json({ content: result.text });
+    }
 
-    return NextResponse.json({ content });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("Gemini AI error:", msg);
-    return NextResponse.json({ content: `DEBUG: ${msg.slice(0, 300)}` });
+    if (result.status === 429) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Please wait a moment.", content: null },
+        { status: 429 }
+      );
+    }
+
+    console.error("[Gemini API error]", result.status, result.message);
+    return NextResponse.json(
+      { error: result.message },
+      { status: result.status }
+    );
+  } catch (err) {
+    console.error("[Gemini fetch error]", err);
+    return NextResponse.json(
+      { error: "Failed to reach Gemini API." },
+      { status: 500 }
+    );
   }
 }

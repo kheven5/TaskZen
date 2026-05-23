@@ -2,7 +2,6 @@
 import { useState, useRef, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Music2, Volume2, VolumeX, Play, Pause, ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const PRESETS = [
@@ -80,30 +79,132 @@ export function AmbientPlayer() {
   }, []);
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-0">
-        {/* Header toggle */}
-        <button
-          onClick={() => setExpanded(p => !p)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent/5 transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <div className={cn(
-              "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
-              isPlaying ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-            )}>
-              {isPlaying ? <Volume2 className="h-3.5 w-3.5" /> : <Music2 className="h-3.5 w-3.5" />}
+    /* Fixed bottom bar — sits above everything, persists across all tab navigations */
+    <div className="fixed bottom-0 left-0 lg:left-16 right-0 z-40">
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            className="overflow-hidden border-t border-border bg-card/95 backdrop-blur-md"
+          >
+            <div className="max-w-7xl mx-auto px-4 lg:px-6 py-4 space-y-3">
+
+              {/* Genre quick-links */}
+              <div>
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1.5">
+                  Find on YouTube
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESETS.map(p => (
+                    <a
+                      key={p.label}
+                      href={`https://www.youtube.com/results?search_query=${encodeURIComponent(p.query)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/60 hover:bg-muted text-[10px] font-medium text-foreground transition-colors"
+                    >
+                      <span>{p.emoji}</span>
+                      {p.label}
+                      <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              {/* URL input row */}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Paste YouTube URL or video ID…"
+                  value={inputUrl}
+                  onChange={e => setInputUrl(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleLoad()}
+                  className="flex-1 h-8 px-3 text-xs rounded-lg bg-muted/50 border border-border focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+                />
+                <button
+                  onClick={handleLoad}
+                  disabled={!inputUrl.trim()}
+                  className="h-8 px-3 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Play
+                </button>
+              </div>
+
+              {/* Embedded player */}
+              {activeEmbed && (
+                <div className="space-y-2.5">
+                  <iframe
+                    key={activeEmbed.id}
+                    ref={iframeRef}
+                    src={buildEmbedUrl(activeEmbed)}
+                    onLoad={handleIframeReady}
+                    allow="autoplay; encrypted-media"
+                    allowFullScreen
+                    className="w-full rounded-xl border border-border"
+                    style={{ height: 160 }}
+                    title="YouTube music player"
+                  />
+                  {/* Playback controls */}
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={togglePlay}
+                      className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors shrink-0"
+                    >
+                      {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    </button>
+                    <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={volume}
+                      onChange={handleVolume}
+                      className="flex-1 h-1.5 accent-primary cursor-pointer"
+                    />
+                    <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <button
+                      onClick={handleStop}
+                      title="Stop"
+                      className="w-7 h-7 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="text-left">
-              <p className="text-xs font-semibold text-foreground leading-none mb-0.5">Ambient Music</p>
-              <p className="text-[11px] text-muted-foreground leading-none">
-                {isPlaying ? "▶ Playing from YouTube" : "Paste a YouTube link to play"}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Always-visible bottom bar */}
+      <div className="border-t border-border bg-card/95 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="flex items-center h-11 gap-3">
+
+            {/* Icon + label */}
+            <button
+              onClick={() => setExpanded(p => !p)}
+              className="flex items-center gap-2 min-w-0 flex-1 hover:opacity-80 transition-opacity"
+            >
+              <div className={cn(
+                "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-all",
+                isPlaying ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
+              )}>
+                {isPlaying ? <Volume2 className="h-3 w-3" /> : <Music2 className="h-3 w-3" />}
+              </div>
+              <span className="text-xs font-semibold text-foreground">Music Player</span>
+              <span className="text-[11px] text-muted-foreground truncate hidden sm:block">
+                {isPlaying ? "▶ Playing from YouTube" : "· Paste a YouTube link to play"}
+              </span>
+            </button>
+
+            {/* Playing indicator bars */}
             {isPlaying && (
-              <div className="flex gap-0.5 items-end h-4">
+              <div className="flex gap-0.5 items-end h-3.5 shrink-0">
                 {[0.6, 1, 0.75, 0.9, 0.55].map((h, i) => (
                   <motion.div
                     key={i}
@@ -115,113 +216,37 @@ export function AmbientPlayer() {
                 ))}
               </div>
             )}
-            {expanded
-              ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-              : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            }
-          </div>
-        </button>
 
-        <AnimatePresence>
-          {expanded && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
-              className="overflow-hidden"
-            >
-              <div className="px-4 pb-4 space-y-3 border-t border-border/50 pt-3">
-
-                {/* Quick-find genre links */}
-                <div>
-                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1.5">
-                    Find on YouTube
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PRESETS.map(p => (
-                      <a
-                        key={p.label}
-                        href={`https://www.youtube.com/results?search_query=${encodeURIComponent(p.query)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/60 hover:bg-muted text-[10px] font-medium text-foreground transition-colors"
-                      >
-                        <span>{p.emoji}</span>
-                        {p.label}
-                        <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
-                      </a>
-                    ))}
-                  </div>
-                </div>
-
-                {/* URL input */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Paste YouTube URL or video ID…"
-                    value={inputUrl}
-                    onChange={e => setInputUrl(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleLoad()}
-                    className="flex-1 h-8 px-3 text-xs rounded-lg bg-muted/50 border border-border focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
-                  />
-                  <button
-                    onClick={handleLoad}
-                    disabled={!inputUrl.trim()}
-                    className="h-8 px-3 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    Play
-                  </button>
-                </div>
-
-                {/* Embedded player + controls */}
-                {activeEmbed && (
-                  <div className="space-y-2.5">
-                    <iframe
-                      key={activeEmbed.id}
-                      ref={iframeRef}
-                      src={buildEmbedUrl(activeEmbed)}
-                      onLoad={handleIframeReady}
-                      allow="autoplay; encrypted-media"
-                      allowFullScreen
-                      className="w-full rounded-xl border border-border"
-                      style={{ height: 160 }}
-                      title="YouTube ambient player"
-                    />
-
-                    {/* Controls */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={togglePlay}
-                        className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors shrink-0"
-                      >
-                        {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                      </button>
-                      <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        value={volume}
-                        onChange={handleVolume}
-                        className="flex-1 h-1.5 accent-primary cursor-pointer"
-                      />
-                      <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <button
-                        onClick={handleStop}
-                        title="Stop"
-                        className="w-7 h-7 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
+            {/* Inline quick controls when playing */}
+            {isPlaying && activeEmbed && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={togglePlay}
+                  className="w-6 h-6 rounded-md bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
+                >
+                  {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                </button>
+                <button
+                  onClick={handleStop}
+                  className="w-6 h-6 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </CardContent>
-    </Card>
+            )}
+
+            {/* Expand/collapse chevron */}
+            <button
+              onClick={() => setExpanded(p => !p)}
+              className="p-1 rounded-md hover:bg-accent/10 text-muted-foreground transition-colors shrink-0"
+            >
+              {expanded
+                ? <ChevronDown className="h-3.5 w-3.5" />
+                : <ChevronUp className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

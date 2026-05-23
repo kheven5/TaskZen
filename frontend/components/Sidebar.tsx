@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Timer, BarChart2, BookOpen, Settings, Zap, Brain, Home, ListTodo, UserCircle, Trophy } from "lucide-react";
+import { Timer, BarChart2, BookOpen, Settings, Zap, Home, ListTodo, UserCircle, Library } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeLogo } from "@/components/ThemeLogo";
@@ -13,7 +13,7 @@ interface SidebarProps {
 const navItems = [
   { id: "dashboard", icon: Home, label: "Dashboard" },
   { id: "timer", icon: Timer, label: "Focus Timer" },
-  { id: "assistant", icon: Brain, label: "AI Assistant" },
+  { id: "reviewer", icon: Library, label: "Reviewer Library" },
   { id: "stats", icon: BarChart2, label: "Analytics" },
   { id: "notes", icon: BookOpen, label: "Study Notes" },
   { id: "todo", icon: ListTodo, label: "To-Do List" },

@@ -11,6 +11,17 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+async function apiFormFetch<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${API}${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? "Request failed");
+  return data as T;
+}
+
 // ── Tasks ─────────────────────────────────────────────────────────────────────
 
 export interface Task {
@@ -143,3 +154,61 @@ export const recordSession = (session: StudySessionPayload) =>
 
 export const getStats = () =>
   apiFetch<{ stats: UserStats; weeklyData: WeeklyDataPoint[] }>("/api/sessions/stats");
+
+// ── Reviewer Library ──────────────────────────────────────────────────────────
+
+export interface KeyConcept {
+  term: string;
+  definition: string;
+}
+
+export interface Flashcard {
+  front: string;
+  back: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  choices: string[];
+  answer: string;
+  explanation: string;
+}
+
+export interface ReviewerSummary {
+  id: string;
+  topic: string;
+  originalFileName: string | null;
+  fileType: string | null;
+  generatedSummary: string | null;
+  bookmarked: boolean;
+  createdAt: string;
+  flashcards: Flashcard[] | null;
+  quizzes: QuizQuestion[] | null;
+  keyConcepts: KeyConcept[] | null;
+}
+
+export interface ReviewerDetail extends ReviewerSummary {
+  reviewerContent: string | null;
+  examQuestions: string[] | null;
+}
+
+export const generateReviewer = (topic?: string, file?: File) => {
+  const fd = new FormData();
+  if (topic) fd.append("topic", topic);
+  if (file) fd.append("file", file);
+  return apiFormFetch<{ reviewer: ReviewerDetail }>("/api/reviewers/generate", fd);
+};
+
+export const getReviewers = (search?: string) =>
+  apiFetch<{ reviewers: ReviewerSummary[] }>(
+    `/api/reviewers${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+  );
+
+export const getReviewer = (id: string) =>
+  apiFetch<{ reviewer: ReviewerDetail }>(`/api/reviewers/${id}`);
+
+export const toggleReviewerBookmark = (id: string) =>
+  apiFetch<{ reviewer: ReviewerDetail }>(`/api/reviewers/${id}/bookmark`, { method: "PATCH" });
+
+export const deleteReviewer = (id: string) =>
+  apiFetch<{ message: string }>(`/api/reviewers/${id}`, { method: "DELETE" });

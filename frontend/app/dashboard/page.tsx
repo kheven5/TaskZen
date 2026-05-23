@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { FocusTimer } from "@/components/FocusTimer";
-import { AIAssistant } from "@/components/AIAssistant";
 import { SessionStats } from "@/components/SessionStats";
 import { ProductivityChart } from "@/components/ProductivityChart";
 import { QuotesWidget } from "@/components/QuotesWidget";
@@ -18,6 +17,7 @@ import { SessionCompletionModal } from "@/components/SessionCompletionModal";
 import { FocusAchievements } from "@/components/FocusAchievements";
 import { XPProgressBar } from "@/components/XPProgressBar";
 import { AmbientPlayer } from "@/components/AmbientPlayer";
+import { ReviewerLibrary } from "@/components/ReviewerLibrary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,8 +29,8 @@ import { useFocusGame } from "@/store/useFocusGame";
 import { getStats, getProfile, getTasks, saveGamification, type UserStats, type WeeklyDataPoint, type Task } from "@/lib/api";
 import { cn, formatMinutes } from "@/lib/utils";
 import {
-  BookOpen, Brain, Zap, GraduationCap,
-  Lightbulb, Calendar, CheckCircle2, BarChart3, Trophy
+  BookOpen, Zap, GraduationCap,
+  Lightbulb, Calendar, CheckCircle2, BarChart3, Trophy, Library
 } from "lucide-react";
 
 const pageVariants = {
@@ -80,12 +80,12 @@ function DashboardOverview({ onNavigate, stats }: { onNavigate: (tab: string) =>
                 Start Focus
               </Button>
               <Button
-                onClick={() => onNavigate("assistant")}
+                onClick={() => onNavigate("reviewer")}
                 variant="outline"
                 className="border-white/30 text-white bg-transparent hover:bg-white/10 rounded-xl text-sm h-9"
               >
-                <Brain className="h-3.5 w-3.5 mr-1.5" />
-                Ask AI
+                <Library className="h-3.5 w-3.5 mr-1.5" />
+                Reviewer
               </Button>
             </div>
           </div>
@@ -134,7 +134,7 @@ function DashboardOverview({ onNavigate, stats }: { onNavigate: (tab: string) =>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: "Start 25m Focus", icon: Zap, tab: "timer", color: "bg-primary/10 text-primary hover:bg-primary/20" },
-                { label: "Chat with AI", icon: Brain, tab: "assistant", color: "bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50" },
+                { label: "Reviewer Library", icon: Library, tab: "reviewer", color: "bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-900/50" },
                 { label: "View Analytics", icon: BarChart3, tab: "stats", color: "bg-green-100 dark:bg-green-900/30 text-green-600 hover:bg-green-200 dark:hover:bg-green-900/50" },
                 { label: "Study Notes", icon: BookOpen, tab: "notes", color: "bg-amber-100 dark:bg-amber-900/30 text-amber-600 hover:bg-amber-200 dark:hover:bg-amber-900/50" },
               ].map((action) => (
@@ -315,7 +315,7 @@ function DashboardContent() {
           onLogout={logout}
         />
 
-        <main className="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-4 pb-16 lg:p-6 lg:pb-16 max-w-7xl mx-auto w-full">
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div key="dashboard" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
@@ -336,7 +336,6 @@ function DashboardContent() {
                       onToggleFocusMode={handleToggleFocusMode}
                       disableKeyboard={focusModeActive}
                     />
-                    <AmbientPlayer />
                     <QuotesWidget />
                   </div>
                   <div className="lg:col-span-2 space-y-4">
@@ -350,22 +349,6 @@ function DashboardContent() {
                       </p>
                     )}
                     <SessionStats stats={liveStats} todaySessions={todaySessions} />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {activeTab === "assistant" && (
-              <motion.div key="assistant" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
-                <div className="grid lg:grid-cols-5 gap-5">
-                  <div className="lg:col-span-3">
-                    <h2 className="text-xl font-bold mb-4">AI Study Assistant</h2>
-                    <AIAssistant />
-                  </div>
-                  <div className="lg:col-span-2 space-y-4">
-                    <h2 className="text-xl font-bold mb-4">Quick Stats</h2>
-                    <SessionStats stats={liveStats} todaySessions={todaySessions} />
-                    <QuotesWidget />
                   </div>
                 </div>
               </motion.div>
@@ -385,6 +368,12 @@ function DashboardContent() {
                     <FocusAchievements xp={focusGame.xp} unlockedIds={focusGame.unlockedIds} />
                   </div>
                 </div>
+              </motion.div>
+            )}
+
+            {activeTab === "reviewer" && (
+              <motion.div key="reviewer" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
+                <ReviewerLibrary />
               </motion.div>
             )}
 
@@ -464,13 +453,16 @@ function DashboardContent() {
         onClose={focusGame.dismissCompletion}
       />
 
+      {/* Persistent music player — always mounted so music never stops on tab change */}
+      <AmbientPlayer />
+
       <AnimatePresence>
         {focusModeActive && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl flex items-center justify-center p-4"
           >
             <div className="w-full max-w-md space-y-4">
               <div className="text-center mb-6">
