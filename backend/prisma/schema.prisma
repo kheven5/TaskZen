@@ -116,12 +116,15 @@ model Reviewer {
   topic            String
   originalFileName String?
   fileType         String?
-  generatedSummary String?
-  reviewerContent  String?
+  generatedSummary String?  @db.Text
+  reviewerContent  String?  @db.Text
   keyConcepts      Json?
   flashcards       Json?
   quizzes          Json?
   examQuestions    Json?
   bookmarked       Boolean  @default(false)
   createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId])
 }
