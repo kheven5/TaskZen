@@ -6,24 +6,12 @@ import {
   Calendar, Tag, Flag, Clock, CheckCircle2, Circle, Loader2, Bell, BellOff
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getTasks, createTask, updateTask, deleteTask, type Task } from "@/lib/api";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 type Priority = "high" | "medium" | "low";
 type Status   = "pending" | "in-progress" | "done";
 
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  priority: Priority;
-  status: Status;
-  dueDate: string;   // "YYYY-MM-DD"
-  dueTime: string;   // "HH:MM"
-  createdAt: string;
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = ["Study", "Personal", "Work", "Health", "Other"];
 
 const PRIORITY_META: Record<Priority, { label: string; color: string; dot: string }> = {
@@ -33,9 +21,9 @@ const PRIORITY_META: Record<Priority, { label: string; color: string; dot: strin
 };
 
 const STATUS_META: Record<Status, { label: string; icon: React.ElementType; color: string }> = {
-  pending:     { label: "Pending",     icon: Circle,       color: "text-muted-foreground" },
-  "in-progress": { label: "In Progress", icon: Loader2,    color: "text-blue-500" },
-  done:        { label: "Done",        icon: CheckCircle2, color: "text-green-500" },
+  pending:       { label: "Pending",     icon: Circle,       color: "text-muted-foreground" },
+  "in-progress": { label: "In Progress", icon: Loader2,      color: "text-blue-500" },
+  done:          { label: "Done",        icon: CheckCircle2, color: "text-green-500" },
 };
 
 const CAT_COLORS: Record<string, string> = {
@@ -46,23 +34,13 @@ const CAT_COLORS: Record<string, string> = {
   Other:    "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300",
 };
 
-const STORAGE_KEY = "taskzen_todos";
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-function load(): Task[] {
-  try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : []; } catch { return []; }
-}
-function persist(tasks: Task[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-    window.dispatchEvent(new Event("taskzen_todos_updated"));
-  } catch {}
-}
 function isOverdue(t: Task) {
   if (t.status === "done" || !t.dueDate) return false;
   const due = new Date(`${t.dueDate}T${t.dueTime || "23:59"}`);
   return due < new Date();
 }
+
 function formatDue(date: string, time: string) {
   if (!date) return null;
   const d = new Date(`${date}T${time || "00:00"}`);
@@ -70,15 +48,15 @@ function formatDue(date: string, time: string) {
     (time ? ` · ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}` : "");
 }
 
-// ─── Empty form ───────────────────────────────────────────────────────────────
-const emptyForm = (): Omit<Task, "id" | "createdAt"> => ({
+const emptyForm = () => ({
   title: "", description: "", category: "Study",
-  priority: "medium", status: "pending", dueDate: "", dueTime: "",
+  priority: "medium" as Priority, status: "pending" as Status, dueDate: "", dueTime: "",
 });
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export function TodoList() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(true);
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [fCategory, setFCategory] = useState("All");
@@ -90,10 +68,21 @@ export function TodoList() {
   const [editTask, setEditTask]     = useState<Task | null>(null);
   const [deleteId, setDeleteId]     = useState<string | null>(null);
   const [form, setForm]             = useState(emptyForm());
+  const [saving, setSaving]         = useState(false);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
 
+  // Load tasks from API
   useEffect(() => {
-    setTasks(load());
+    setLoadingTasks(true);
+    getTasks()
+      .then(({ tasks }) => {
+        setTasks(tasks);
+        // Notify dashboard of current tasks for notifications
+        window.dispatchEvent(new CustomEvent("taskzen_todos_updated", { detail: tasks }));
+      })
+      .catch(console.error)
+      .finally(() => setLoadingTasks(false));
+
     if (typeof window !== "undefined" && "Notification" in window) {
       setNotifPermission(Notification.permission);
     }
@@ -105,24 +94,58 @@ export function TodoList() {
     setNotifPermission(result);
   };
 
-  const save = (updated: Task[]) => { setTasks(updated); persist(updated); };
-
   const openCreate = () => { setEditTask(null); setForm(emptyForm()); setModalOpen(true); };
-  const openEdit   = (t: Task) => { setEditTask(t); setForm({ title: t.title, description: t.description, category: t.category, priority: t.priority, status: t.status, dueDate: t.dueDate, dueTime: t.dueTime }); setModalOpen(true); };
-
-  const handleSave = () => {
-    if (!form.title.trim()) return;
-    const now = new Date().toISOString();
-    if (editTask) {
-      save(tasks.map(t => t.id === editTask.id ? { ...t, ...form } : t));
-    } else {
-      save([{ id: crypto.randomUUID(), ...form, createdAt: now }, ...tasks]);
-    }
-    setModalOpen(false);
+  const openEdit   = (t: Task) => {
+    setEditTask(t);
+    setForm({ title: t.title, description: t.description, category: t.category,
+              priority: t.priority as Priority, status: t.status as Status,
+              dueDate: t.dueDate, dueTime: t.dueTime });
+    setModalOpen(true);
   };
 
-  const toggleDone = (id: string) =>
-    save(tasks.map(t => t.id === id ? { ...t, status: t.status === "done" ? "pending" : "done" } : t));
+  const handleSave = async () => {
+    if (!form.title.trim()) return;
+    setSaving(true);
+    try {
+      if (editTask) {
+        const { task } = await updateTask(editTask.id, form);
+        setTasks(prev => prev.map(t => t.id === editTask.id ? task : t));
+      } else {
+        const { task } = await createTask(form);
+        setTasks(prev => [task, ...prev]);
+      }
+      setModalOpen(false);
+      window.dispatchEvent(new Event("taskzen_todos_updated"));
+    } catch (err) {
+      console.error("Failed to save task:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleDone = async (id: string) => {
+    const t = tasks.find(x => x.id === id);
+    if (!t) return;
+    const newStatus = t.status === "done" ? "pending" : "done";
+    try {
+      const { task } = await updateTask(id, { status: newStatus });
+      setTasks(prev => prev.map(x => x.id === id ? task : x));
+      window.dispatchEvent(new Event("taskzen_todos_updated"));
+    } catch (err) {
+      console.error("Failed to toggle task:", err);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteTask(id);
+      setTasks(prev => prev.filter(t => t.id !== id));
+      setDeleteId(null);
+      window.dispatchEvent(new Event("taskzen_todos_updated"));
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+    }
+  };
 
   const hasFilters = fCategory !== "All" || fPriority !== "All" || fStatus !== "All" || fDate;
 
@@ -151,7 +174,7 @@ export function TodoList() {
         <div>
           <h2 className="text-xl font-bold">To-Do List</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {counts.done}/{counts.total} completed
+            {loadingTasks ? "Loading..." : `${counts.done}/${counts.total} completed`}
             {counts.overdue > 0 && <span className="text-red-500 ml-2">· {counts.overdue} overdue</span>}
           </p>
         </div>
@@ -248,8 +271,6 @@ export function TodoList() {
           >
             <Card>
               <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-
-                {/* Category */}
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Tag className="h-3 w-3" />Category</label>
                   <div className="flex flex-wrap gap-1">
@@ -261,8 +282,6 @@ export function TodoList() {
                     ))}
                   </div>
                 </div>
-
-                {/* Priority */}
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Flag className="h-3 w-3" />Priority</label>
                   <div className="flex flex-wrap gap-1">
@@ -274,8 +293,6 @@ export function TodoList() {
                     ))}
                   </div>
                 </div>
-
-                {/* Status */}
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><CheckCircle2 className="h-3 w-3" />Status</label>
                   <div className="flex flex-wrap gap-1">
@@ -287,8 +304,6 @@ export function TodoList() {
                     ))}
                   </div>
                 </div>
-
-                {/* Date */}
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Calendar className="h-3 w-3" />Due Date</label>
                   <div className="flex items-center gap-2">
@@ -297,7 +312,6 @@ export function TodoList() {
                     {fDate && <button onClick={() => setFDate("")} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
                   </div>
                 </div>
-
               </CardContent>
               {hasFilters && (
                 <div className="px-4 pb-3">
@@ -313,7 +327,11 @@ export function TodoList() {
       </AnimatePresence>
 
       {/* Task list */}
-      {filtered.length === 0 ? (
+      {loadingTasks ? (
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
           <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
             <CheckCircle2 className="h-7 w-7 text-muted-foreground" />
@@ -327,7 +345,7 @@ export function TodoList() {
           <AnimatePresence>
             {filtered.map((task, i) => {
               const overdue = isOverdue(task);
-              const StatusIcon = STATUS_META[task.status].icon;
+              const StatusIcon = STATUS_META[task.status as Status]?.icon ?? Circle;
               return (
                 <motion.div
                   key={task.id}
@@ -338,18 +356,14 @@ export function TodoList() {
                 >
                   <Card className={`group transition-colors hover:border-foreground/20 ${task.status === "done" ? "opacity-60" : ""}`}>
                     <CardContent className="p-3 flex items-start gap-3">
-
-                      {/* Done toggle */}
                       <button
                         onClick={() => toggleDone(task.id)}
                         className={`mt-0.5 shrink-0 transition-colors ${task.status === "done" ? "text-green-500" : "text-muted-foreground hover:text-foreground"}`}
                       >
                         {task.status === "done"
-                          ? <CheckCircle2 className="h-4.5 w-4.5 h-[18px] w-[18px]" />
+                          ? <CheckCircle2 className="h-[18px] w-[18px]" />
                           : <Circle className="h-[18px] w-[18px]" />}
                       </button>
-
-                      {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <p className={`text-sm font-medium leading-snug ${task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}`}>
@@ -368,21 +382,17 @@ export function TodoList() {
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{task.description}</p>
                         )}
                         <div className="flex flex-wrap items-center gap-2 mt-2">
-                          {/* Category */}
-                          <span className={`text-[0.6rem] px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[task.category]}`}>
+                          <span className={`text-[0.6rem] px-2 py-0.5 rounded-full font-medium ${CAT_COLORS[task.category] ?? CAT_COLORS.Other}`}>
                             {task.category}
                           </span>
-                          {/* Priority */}
-                          <span className={`flex items-center gap-1 text-[0.6rem] font-medium ${PRIORITY_META[task.priority].color}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_META[task.priority].dot}`} />
-                            {PRIORITY_META[task.priority].label}
+                          <span className={`flex items-center gap-1 text-[0.6rem] font-medium ${PRIORITY_META[task.priority as Priority]?.color ?? ""}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_META[task.priority as Priority]?.dot ?? ""}`} />
+                            {PRIORITY_META[task.priority as Priority]?.label ?? task.priority}
                           </span>
-                          {/* Status */}
-                          <span className={`flex items-center gap-1 text-[0.6rem] font-medium ${STATUS_META[task.status].color}`}>
+                          <span className={`flex items-center gap-1 text-[0.6rem] font-medium ${STATUS_META[task.status as Status]?.color ?? ""}`}>
                             <StatusIcon className="h-3 w-3" />
-                            {STATUS_META[task.status].label}
+                            {STATUS_META[task.status as Status]?.label ?? task.status}
                           </span>
-                          {/* Due */}
                           {task.dueDate && (
                             <span className={`flex items-center gap-1 text-[0.6rem] font-medium ${overdue ? "text-red-500" : "text-muted-foreground"}`}>
                               <Clock className="h-3 w-3" />
@@ -392,7 +402,6 @@ export function TodoList() {
                           )}
                         </div>
                       </div>
-
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -425,7 +434,6 @@ export function TodoList() {
               </div>
 
               <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
-                {/* Title */}
                 <input
                   type="text"
                   value={form.title}
@@ -433,8 +441,6 @@ export function TodoList() {
                   placeholder="Task title *"
                   className="w-full px-3 py-2 text-sm bg-background border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/40 transition-colors"
                 />
-
-                {/* Description */}
                 <textarea
                   value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -442,8 +448,6 @@ export function TodoList() {
                   rows={3}
                   className="w-full px-3 py-2 text-sm bg-background border border-border text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-foreground/40 transition-colors resize-none"
                 />
-
-                {/* Due date + time */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Calendar className="h-3 w-3" />Due Date</label>
@@ -458,8 +462,6 @@ export function TodoList() {
                       className="w-full text-xs px-2 py-1.5 bg-background border border-border text-foreground focus:outline-none focus:border-foreground/40 transition-colors" />
                   </div>
                 </div>
-
-                {/* Category */}
                 <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Tag className="h-3 w-3" />Category</label>
                   <div className="flex flex-wrap gap-1.5">
@@ -471,8 +473,6 @@ export function TodoList() {
                     ))}
                   </div>
                 </div>
-
-                {/* Priority */}
                 <div className="space-y-1.5">
                   <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Flag className="h-3 w-3" />Priority</label>
                   <div className="flex gap-2">
@@ -485,7 +485,6 @@ export function TodoList() {
                     ))}
                   </div>
                 </div>
-
               </div>
 
               <div className="flex items-center justify-end gap-2 p-4 border-t border-border">
@@ -493,9 +492,9 @@ export function TodoList() {
                   className="px-4 py-2 text-xs text-muted-foreground hover:text-foreground border border-border hover:border-foreground/40 transition-colors">
                   Cancel
                 </button>
-                <button onClick={handleSave} disabled={!form.title.trim()}
+                <button onClick={handleSave} disabled={!form.title.trim() || saving}
                   className="flex items-center gap-1.5 px-4 py-2 text-xs bg-foreground text-background font-semibold hover:opacity-80 transition-opacity disabled:opacity-30">
-                  <Check className="h-3.5 w-3.5" />
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   {editTask ? "Save Changes" : "Add Task"}
                 </button>
               </div>
@@ -522,7 +521,7 @@ export function TodoList() {
                   className="px-4 py-2 text-xs border border-border text-muted-foreground hover:text-foreground transition-colors">
                   Cancel
                 </button>
-                <button onClick={() => { save(tasks.filter(t => t.id !== deleteId)); setDeleteId(null); }}
+                <button onClick={() => deleteId && handleDelete(deleteId)}
                   className="px-4 py-2 text-xs bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors">
                   Delete
                 </button>

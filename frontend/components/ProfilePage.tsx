@@ -2,13 +2,12 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  Camera, Trash2, Pencil, Check, X,
+  Camera, Trash2, Pencil, Check, X, Loader2,
   User, Mail, GraduationCap, Building2,
   CalendarDays, BookMarked
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-
-const PROFILE_KEY = "taskzen_profile";
+import { getProfile, updateProfile, type UserProfile } from "@/lib/api";
 
 interface Profile {
   avatar:        string;
@@ -29,31 +28,13 @@ const defaultProfile = (): Profile => ({
   dailyGoal: "", studyTime: "", learningStyle: "",
 });
 
-function loadProfile(): Profile {
-  try {
-    const r = localStorage.getItem(PROFILE_KEY);
-    return r ? { ...defaultProfile(), ...JSON.parse(r) } : defaultProfile();
-  } catch { return defaultProfile(); }
-}
-
-export function saveProfileToStorage(p: Profile) {
-  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch {}
-}
-
-export function getStoredAvatar(): string {
-  try {
-    const r = localStorage.getItem(PROFILE_KEY);
-    return r ? JSON.parse(r).avatar ?? "" : "";
-  } catch { return ""; }
-}
-
-// ─── Section config ───────────────────────────────────────────────────────────
 interface FieldDef {
   key: keyof Profile;
   label: string;
   icon: React.ElementType;
   placeholder: string;
   options?: string[];
+  readOnly?: boolean;
 }
 
 const SECTIONS: { title: string; fields: FieldDef[] }[] = [
@@ -61,7 +42,7 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
     title: "Personal Information",
     fields: [
       { key: "fullName",  label: "Full Name",     icon: User,        placeholder: "Enter your full name" },
-      { key: "email",     label: "Email Address", icon: Mail,        placeholder: "you@example.com" },
+      { key: "email",     label: "Email Address", icon: Mail,        placeholder: "you@example.com", readOnly: true },
       { key: "studentId", label: "Student ID",    icon: BookMarked,  placeholder: "e.g. 2024-00123" },
     ],
   },
@@ -80,26 +61,63 @@ const SECTIONS: { title: string; fields: FieldDef[] }[] = [
 
 interface ProfilePageProps {
   username?: string;
+  userEmail?: string;
   onProfileChange?: (avatar: string) => void;
 }
 
-export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
+export function ProfilePage({ username, userEmail, onProfileChange }: ProfilePageProps) {
   const [profile, setProfile] = useState<Profile>(defaultProfile());
+  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<keyof Profile | null>(null);
   const [draft, setDraft] = useState("");
   const [hovering, setHovering] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Load profile from API
   useEffect(() => {
-    const p = loadProfile();
-    if (!p.fullName && username) p.fullName = username;
-    setProfile(p);
-  }, [username]);
+    setLoading(true);
+    getProfile()
+      .then(({ profile: p, user }) => {
+        setProfile({
+          avatar:        p.avatar,
+          fullName:      p.fullName || user.username,
+          email:         user.email,
+          institution:   p.institution,
+          fieldOfStudy:  p.fieldOfStudy,
+          yearLevel:     p.yearLevel,
+          studentId:     p.studentId,
+          dailyGoal:     p.dailyGoal,
+          studyTime:     p.studyTime,
+          learningStyle: p.learningStyle,
+        });
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
-  const save = (updated: Profile) => {
+  const save = async (updated: Profile) => {
     setProfile(updated);
-    saveProfileToStorage(updated);
-    onProfileChange?.(updated.avatar);
+    setSaving(true);
+    try {
+      await updateProfile({
+        avatar:        updated.avatar,
+        fullName:      updated.fullName,
+        institution:   updated.institution,
+        fieldOfStudy:  updated.fieldOfStudy,
+        yearLevel:     updated.yearLevel,
+        studentId:     updated.studentId,
+        dailyGoal:     updated.dailyGoal,
+        studyTime:     updated.studyTime,
+        learningStyle: updated.learningStyle,
+      });
+      onProfileChange?.(updated.avatar);
+      window.dispatchEvent(new CustomEvent("taskzen_profile_updated", { detail: updated }));
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,17 +131,32 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
 
   const deleteAvatar = () => save({ ...profile, avatar: "" });
 
-  const startEdit = (key: keyof Profile) => { setEditing(key); setDraft(profile[key] as string); };
-  const confirmEdit = () => { if (!editing) return; save({ ...profile, [editing]: draft }); setEditing(null); };
+  const startEdit = (key: keyof Profile) => {
+    if (key === "email") return; // email is read-only
+    setEditing(key);
+    setDraft(profile[key] as string);
+  };
+  const confirmEdit = () => {
+    if (!editing) return;
+    save({ ...profile, [editing]: draft });
+    setEditing(null);
+  };
   const cancelEdit = () => setEditing(null);
 
   const initials = (profile.fullName || username || "U")
     .trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-5">
 
-      {/* Page header */}
       <div>
         <h2 className="text-xl font-bold">My Profile</h2>
         <p className="text-xs text-muted-foreground mt-0.5">Manage your personal and academic information</p>
@@ -134,7 +167,6 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
         <CardContent className="p-6">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
 
-            {/* Avatar circle */}
             <div
               className="relative shrink-0"
               onMouseEnter={() => setHovering(true)}
@@ -166,7 +198,6 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
             </div>
 
-            {/* Name & meta */}
             <div className="flex-1 text-center sm:text-left">
               <h3 className="text-lg font-bold text-foreground leading-tight">
                 {profile.fullName || username || "Your Name"}
@@ -181,6 +212,11 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
                 {profile.yearLevel && (
                   <span className="text-[0.65rem] px-2 py-0.5 bg-primary/10 text-primary font-medium rounded-full">
                     {profile.yearLevel}
+                  </span>
+                )}
+                {saving && (
+                  <span className="text-[0.65rem] text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Saving…
                   </span>
                 )}
               </div>
@@ -250,12 +286,14 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
                         <p className={`text-sm ${profile[field.key] ? "text-foreground font-medium" : "text-muted-foreground/40 italic font-normal"}`}>
                           {(profile[field.key] as string) || field.placeholder}
                         </p>
-                        <button
-                          onClick={() => startEdit(field.key)}
-                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all shrink-0"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
+                        {!field.readOnly && (
+                          <button
+                            onClick={() => startEdit(field.key)}
+                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all shrink-0"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

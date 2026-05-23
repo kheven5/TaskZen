@@ -63,18 +63,22 @@ model Note {
 }
 
 model UserProfile {
-  id            String @id @default(cuid())
-  userId        String @unique
-  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  avatar        String @default("")
-  fullName      String @default("")
-  institution   String @default("")
-  fieldOfStudy  String @default("")
-  yearLevel     String @default("")
-  studentId     String @default("")
-  dailyGoal     String @default("")
-  studyTime     String @default("")
-  learningStyle String @default("")
+  id               String @id @default(cuid())
+  userId           String @unique
+  user             User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  avatar           String @default("")
+  fullName         String @default("")
+  institution      String @default("")
+  fieldOfStudy     String @default("")
+  yearLevel        String @default("")
+  studentId        String @default("")
+  dailyGoal        String @default("")
+  studyTime        String @default("")
+  learningStyle    String @default("")
+  xp               Int    @default(0)
+  achievements     String @default("[]")
+  totalDistractions Int   @default(0)
+  perfectSessions  Int    @default(0)
 }
 
 model TimerSettings {
@@ -89,6 +93,7 @@ model TimerSettings {
   autoStartFocus     Boolean @default(false)
   soundEnabled       Boolean @default(true)
   volume             Float   @default(0.5)
+  weeklyGoal         Int     @default(600)
 }
 
 model StudySession {

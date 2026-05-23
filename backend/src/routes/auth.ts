@@ -12,10 +12,14 @@ const FRONTEND_URL = process.env.FRONTEND_URL ?? "http://localhost:3000";
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 
 // GET /api/auth/google  — prompt forces account picker every time
-router.get("/google", passport.authenticate("google", {
-  scope: ["email", "profile"],
-  prompt: "select_account",
-}));
+router.get("/google", (req, res, next) => {
+  console.log("[Auth] Starting Google OAuth flow");
+  passport.authenticate("google", {
+    scope: ["email", "profile"],
+    prompt: "select_account",
+    access_type: "offline",
+  } as object)(req, res, next);
+});
 
 // GET /api/auth/google/callback
 router.get(
@@ -26,9 +30,12 @@ router.get(
   }),
   (req: Request, res: Response): void => {
     const user = req.user as { id: string; email: string; username: string };
+    console.log(`[Auth] Google callback success — issuing JWT for user ${user.id} (${user.email})`);
 
     const token = signToken({ userId: user.id, email: user.email, username: user.username });
 
+    // Clear any old token before setting new one
+    res.clearCookie("token");
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -143,9 +150,17 @@ router.post("/login", async (req: Request, res: Response): Promise<void> => {
 
 // POST /api/auth/logout
 router.post("/logout", (req: Request, res: Response): void => {
-  res.clearCookie("token", { httpOnly: true, sameSite: "lax" });
+  console.log("[Auth] Logout requested");
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  });
   if (req.session) {
-    req.session.destroy(() => res.json({ message: "Logged out" }));
+    req.session.destroy(() => {
+      console.log("[Auth] Session destroyed");
+      res.json({ message: "Logged out" });
+    });
   } else {
     res.json({ message: "Logged out" });
   }

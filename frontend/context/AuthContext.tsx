@@ -54,13 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await authLogout();
     // Clear all stale local data so next login starts fresh
     if (typeof window !== "undefined") {
-      localStorage.removeItem("taskzen_profile");
-      localStorage.removeItem("taskzen_todos");
-      localStorage.removeItem("taskzen_notes");
-      localStorage.removeItem("timerSettings");
-      localStorage.removeItem("focusai_session");
-      localStorage.removeItem("focusai_users");
-      localStorage.removeItem("focusai_testimonials");
+      ["taskzen_profile", "taskzen_todos", "taskzen_notes", "timerSettings",
+       "taskzen_weekly_goal", "focusai_session", "focusai_users",
+       "focusai_testimonials", "taskzen_notified"]
+        .forEach(k => localStorage.removeItem(k));
     }
     setUser(null);
   }, []);

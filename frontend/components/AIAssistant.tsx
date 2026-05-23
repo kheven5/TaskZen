@@ -73,7 +73,7 @@ export function AIAssistant() {
         {
           id: generateId(),
           role: "assistant",
-          content: "I'm having trouble connecting right now. Please check your OpenAI API key in .env.local and try again!",
+          content: "I'm having trouble connecting right now. Please try again in a moment.",
           timestamp: new Date(),
         },
       ]);

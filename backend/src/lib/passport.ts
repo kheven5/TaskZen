@@ -12,16 +12,20 @@ passport.use(
     async (_accessToken, _refreshToken, profile, done) => {
       try {
         const googleId = profile.id;
-        const email = profile.emails?.[0]?.value;
+        const email = profile.emails?.[0]?.value?.toLowerCase();
+
+        console.log(`[Auth] Google OAuth callback — googleId: ${googleId}, email: ${email}`);
 
         if (!email) return done(new Error("No email returned from Google"));
 
         // 1. Try to find user by googleId (fastest, most accurate)
         let user = await prisma.user.findUnique({ where: { googleId } });
+        console.log(`[Auth] Lookup by googleId: ${user ? `found user ${user.id} (${user.email})` : "not found"}`);
 
         if (!user) {
-          // 2. Try to find by email (account linking — user may have signed up with email/password before)
+          // 2. Try to find by email (account linking — user signed up with email/password)
           user = await prisma.user.findUnique({ where: { email } });
+          console.log(`[Auth] Lookup by email: ${user ? `found user ${user.id}` : "not found"}`);
 
           if (user) {
             // Link the Google ID to the existing account
@@ -29,6 +33,7 @@ passport.use(
               where: { id: user.id },
               data: { googleId },
             });
+            console.log(`[Auth] Linked googleId to existing user ${user.id}`);
           } else {
             // 3. New user — create account
             const rawName = profile.displayName ?? email.split("@")[0];
@@ -36,11 +41,14 @@ passport.use(
             user = await prisma.user.create({
               data: { email, googleId, username, password: null },
             });
+            console.log(`[Auth] Created new user ${user.id} for email ${email}`);
           }
         }
 
+        console.log(`[Auth] Authenticating as user ${user.id} (${user.email})`);
         return done(null, user);
       } catch (err) {
+        console.error("[Auth] Passport Google strategy error:", err);
         return done(err as Error);
       }
     }

@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       systemInstruction: SYSTEM_PROMPT,
     });
 
@@ -44,10 +44,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ content });
   } catch (error) {
-    console.error("Gemini AI error:", error);
-    return NextResponse.json({
-      content:
-        "I'm having trouble connecting right now. Please check your GEMINI_API_KEY in .env.local and try again!",
-    });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("Gemini AI error:", msg);
+    return NextResponse.json({ content: `DEBUG: ${msg.slice(0, 300)}` });
   }
 }

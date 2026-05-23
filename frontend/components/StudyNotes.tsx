@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Search, Trash2, Pencil, X, Check, SlidersHorizontal, BookOpen, Tag, Calendar } from "lucide-react";
+import { Plus, Search, Trash2, Pencil, X, Check, SlidersHorizontal, BookOpen, Tag, Calendar, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { getNotes, createNote, updateNote, deleteNote, type Note } from "@/lib/api";
 
 const CATEGORIES = ["General", "Math", "Science", "History", "Language", "Programming", "Other"];
 const CATEGORY_COLORS: Record<string, string> = {
@@ -16,34 +16,13 @@ const CATEGORY_COLORS: Record<string, string> = {
   Other:       "bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300",
 };
 
-interface Note {
-  id: string;
-  title: string;
-  content: string;
-  category: string;
-  createdAt: string; // ISO date string
-  updatedAt: string;
-}
-
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-const STORAGE_KEY = "taskzen_notes";
-
-function loadNotes(): Note[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-function saveNotes(notes: Note[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(notes)); } catch {}
-}
-
 export function StudyNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterDate, setFilterDate] = useState("");
@@ -51,15 +30,19 @@ export function StudyNotes() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Form state
   const [formTitle, setFormTitle] = useState("");
   const [formContent, setFormContent] = useState("");
   const [formCategory, setFormCategory] = useState("General");
 
-  useEffect(() => { setNotes(loadNotes()); }, []);
-
-  const persist = (updated: Note[]) => { setNotes(updated); saveNotes(updated); };
+  useEffect(() => {
+    setLoading(true);
+    getNotes()
+      .then(({ notes }) => setNotes(notes))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const openCreate = () => {
     setEditingNote(null);
@@ -73,28 +56,34 @@ export function StudyNotes() {
     setModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formTitle.trim() && !formContent.trim()) return;
-    const now = new Date().toISOString();
-    if (editingNote) {
-      persist(notes.map(n => n.id === editingNote.id
-        ? { ...n, title: formTitle, content: formContent, category: formCategory, updatedAt: now }
-        : n));
-    } else {
-      const newNote: Note = {
-        id: crypto.randomUUID(),
-        title: formTitle || "Untitled",
-        content: formContent,
-        category: formCategory,
-        createdAt: now,
-        updatedAt: now,
-      };
-      persist([newNote, ...notes]);
+    setSaving(true);
+    try {
+      if (editingNote) {
+        const { note } = await updateNote(editingNote.id, { title: formTitle, content: formContent, category: formCategory });
+        setNotes(prev => prev.map(n => n.id === editingNote.id ? note : n));
+      } else {
+        const { note } = await createNote({ title: formTitle || "Untitled", content: formContent, category: formCategory });
+        setNotes(prev => [note, ...prev]);
+      }
+      setModalOpen(false);
+    } catch (err) {
+      console.error("Failed to save note:", err);
+    } finally {
+      setSaving(false);
     }
-    setModalOpen(false);
   };
 
-  const handleDelete = (id: string) => { persist(notes.filter(n => n.id !== id)); setDeleteId(null); };
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteNote(id);
+      setNotes(prev => prev.filter(n => n.id !== id));
+      setDeleteId(null);
+    } catch (err) {
+      console.error("Failed to delete note:", err);
+    }
+  };
 
   const filtered = useMemo(() => {
     return notes.filter(n => {
@@ -161,7 +150,6 @@ export function StudyNotes() {
           >
             <Card>
               <CardContent className="p-4 flex flex-col sm:flex-row gap-4">
-                {/* Category */}
                 <div className="flex-1 space-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                     <Tag className="h-3 w-3" /> Category
@@ -182,8 +170,6 @@ export function StudyNotes() {
                     ))}
                   </div>
                 </div>
-
-                {/* Date */}
                 <div className="sm:w-48 space-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                     <Calendar className="h-3 w-3" /> Date
@@ -202,8 +188,6 @@ export function StudyNotes() {
                     )}
                   </div>
                 </div>
-
-                {/* Clear all */}
                 {(filterCategory !== "All" || filterDate) && (
                   <button
                     onClick={() => { setFilterCategory("All"); setFilterDate(""); }}
@@ -219,7 +203,11 @@ export function StudyNotes() {
       </AnimatePresence>
 
       {/* Notes grid */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
           <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center">
             <BookOpen className="h-7 w-7 text-muted-foreground" />
@@ -260,7 +248,7 @@ export function StudyNotes() {
                       </p>
                     )}
                     <div className="flex items-center justify-between pt-1 mt-auto">
-                      <span className={`text-[0.65rem] px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[note.category]}`}>
+                      <span className={`text-[0.65rem] px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[note.category] ?? CATEGORY_COLORS.Other}`}>
                         {note.category}
                       </span>
                       <span className="text-[0.65rem] text-muted-foreground">{formatDate(note.updatedAt)}</span>
@@ -340,10 +328,10 @@ export function StudyNotes() {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!formTitle.trim() && !formContent.trim()}
+                  disabled={(!formTitle.trim() && !formContent.trim()) || saving}
                   className="flex items-center gap-1.5 px-4 py-2 text-xs bg-foreground text-background font-semibold hover:opacity-80 transition-opacity disabled:opacity-30"
                 >
-                  <Check className="h-3.5 w-3.5" />
+                  {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   {editingNote ? "Save Changes" : "Create Note"}
                 </button>
               </div>
@@ -377,7 +365,7 @@ export function StudyNotes() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => handleDelete(deleteId)}
+                  onClick={() => deleteId && handleDelete(deleteId)}
                   className="px-4 py-2 text-xs bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors"
                 >
                   Delete

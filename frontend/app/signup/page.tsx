@@ -211,7 +211,14 @@ export default function SignupPage() {
           <div className="mb-6">
             <button
               type="button"
-              onClick={() => { window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/api/auth/google`; }}
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  ["taskzen_profile", "taskzen_todos", "taskzen_notes", "timerSettings",
+                   "taskzen_weekly_goal", "focusai_session", "focusai_users", "focusai_testimonials"]
+                    .forEach(k => localStorage.removeItem(k));
+                }
+                window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/api/auth/google`;
+              }}
               className="w-full flex items-center justify-center gap-2 border border-border bg-card hover:bg-accent transition-colors py-2.5 text-muted-foreground hover:text-foreground"
               style={{ fontSize: "0.65rem", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "Arial, sans-serif" }}
             >

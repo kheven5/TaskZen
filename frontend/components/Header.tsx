@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Menu, Bell, Zap, BookOpen, Settings, Brain, BarChart2, Home, Timer, LogOut, Flame, ListTodo, Clock, AlertCircle, CheckCircle2, UserCircle } from "lucide-react";
+import { Menu, Bell, Zap, BookOpen, Settings, Brain, BarChart2, Home, Timer, LogOut, Flame, ListTodo, Clock, AlertCircle, CheckCircle2, UserCircle, Trophy } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { ThemeToggle } from "./ThemeToggle";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -55,7 +55,9 @@ interface HeaderProps {
   onTabChange: (tab: string) => void;
   streak: number;
   username?: string;
+  avatar?: string;
   onLogout?: () => void;
+  tasks?: Task[];
 }
 
 const mobileNavItems = [
@@ -76,37 +78,30 @@ function getInitials(name?: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function Header({ activeTab, onTabChange, streak, username, onLogout }: HeaderProps) {
+export function Header({ activeTab, onTabChange, streak, username, avatar: avatarProp, onLogout, tasks: tasksProp }: HeaderProps) {
   const initials = getInitials(username);
   const [alertTasks, setAlertTasks] = useState<ReturnType<typeof getAlertTasks>>([]);
-  const [avatar, setAvatar] = useState("");
+  const [avatar, setAvatar] = useState(avatarProp ?? "");
 
   useEffect(() => {
-    try {
-      const r = localStorage.getItem("taskzen_profile");
-      if (r) setAvatar(JSON.parse(r).avatar ?? "");
-    } catch {}
-    const onStorage = () => {
-      try {
-        const r = localStorage.getItem("taskzen_profile");
-        if (r) setAvatar(JSON.parse(r).avatar ?? "");
-      } catch {}
+    const onProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.avatar !== undefined) setAvatar(detail.avatar);
     };
-    window.addEventListener("storage", onStorage);
-    window.addEventListener("taskzen_profile_updated", onStorage);
-    return () => {
-      window.removeEventListener("storage", onStorage);
-      window.removeEventListener("taskzen_profile_updated", onStorage);
-    };
+    window.addEventListener("taskzen_profile_updated", onProfileUpdated);
+    return () => window.removeEventListener("taskzen_profile_updated", onProfileUpdated);
   }, []);
 
+  // Update avatar when prop changes (e.g. after profile load)
+  useEffect(() => {
+    if (avatarProp !== undefined) setAvatar(avatarProp);
+  }, [avatarProp]);
+
   const refreshTasks = useCallback(() => {
-    try {
-      const raw = localStorage.getItem("taskzen_todos");
-      const tasks: Task[] = raw ? JSON.parse(raw) : [];
-      setAlertTasks(getAlertTasks(tasks));
-    } catch {}
-  }, []);
+    if (tasksProp) {
+      setAlertTasks(getAlertTasks(tasksProp));
+    }
+  }, [tasksProp]);
 
   useEffect(() => {
     refreshTasks();

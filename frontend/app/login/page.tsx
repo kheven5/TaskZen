@@ -66,6 +66,12 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
+    // Clear all user-specific cached data so a different account starts fresh
+    if (typeof window !== "undefined") {
+      ["taskzen_profile", "taskzen_todos", "taskzen_notes", "timerSettings",
+       "taskzen_weekly_goal", "focusai_session", "focusai_users", "focusai_testimonials"]
+        .forEach(k => localStorage.removeItem(k));
+    }
     window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"}/api/auth/google`;
   };
 

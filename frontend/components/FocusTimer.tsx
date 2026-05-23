@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, formatTime, CIRCUMFERENCE, getStrokeDashoffset } from "@/lib/utils";
 import type { TimerMode } from "@/types";
-import { useTimer } from "@/hooks/useTimer";
+import { useTimerContext } from "@/context/TimerContext";
 
 interface FocusTimerProps {
   onSessionComplete?: (sessions: number) => void;
   focusModeActive?: boolean;
   onToggleFocusMode?: () => void;
+  disableKeyboard?: boolean;
 }
 
 const modeConfig = {
@@ -21,16 +22,17 @@ const modeConfig = {
   "long-break": { label: "Long Break", color: "#C4956A", bgClass: "from-[#C4956A]/10 to-[#D4A980]/10" },
 };
 
-export function FocusTimer({ onSessionComplete, focusModeActive, onToggleFocusMode }: FocusTimerProps) {
+export function FocusTimer({ onSessionComplete, focusModeActive, onToggleFocusMode, disableKeyboard }: FocusTimerProps) {
   const {
     mode, status, timeLeft, progress,
     completedSessions, start, pause, reset, switchMode,
-  } = useTimer();
+  } = useTimerContext();
 
   const config = modeConfig[mode];
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — disabled when another FocusTimer instance is already handling keys
   useEffect(() => {
+    if (disableKeyboard) return;
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.code === "Space") {
@@ -42,7 +44,7 @@ export function FocusTimer({ onSessionComplete, focusModeActive, onToggleFocusMo
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [status, start, pause, reset, onToggleFocusMode]);
+  }, [status, start, pause, reset, onToggleFocusMode, disableKeyboard]);
 
   useEffect(() => {
     if (status === "finished") onSessionComplete?.(completedSessions);

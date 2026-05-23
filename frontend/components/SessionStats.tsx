@@ -1,11 +1,12 @@
 "use client";
 import { motion } from "framer-motion";
 import { Flame, Target, TrendingUp, Clock, Zap, Pencil, Check, X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { formatMinutes, calculateProgress } from "@/lib/utils";
+import { updateTimerSettings } from "@/lib/api";
 import type { UserStats } from "@/types";
 
 interface SessionStatsProps {
@@ -57,11 +58,6 @@ export function SessionStats({ stats, todaySessions = 0 }: SessionStatsProps) {
   const [editing, setEditing] = useState(false);
   const [inputHours, setInputHours] = useState("");
 
-  useEffect(() => {
-    const saved = localStorage.getItem("taskzen_weekly_goal");
-    if (saved) setCustomGoalMinutes(Number(saved));
-  }, []);
-
   const weeklyPercent = calculateProgress(stats.weeklyProgress, customGoalMinutes);
 
   const startEdit = () => {
@@ -74,7 +70,7 @@ export function SessionStats({ stats, todaySessions = 0 }: SessionStatsProps) {
     if (!isNaN(hrs) && hrs > 0) {
       const mins = Math.round(hrs * 60);
       setCustomGoalMinutes(mins);
-      localStorage.setItem("taskzen_weekly_goal", String(mins));
+      updateTimerSettings({ weeklyGoal: mins }).catch(console.error);
     }
     setEditing(false);
   };

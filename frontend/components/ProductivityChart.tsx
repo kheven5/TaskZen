@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -6,7 +7,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { weeklyData } from "@/data/dummy";
+import { getStats, type WeeklyDataPoint } from "@/lib/api";
 
 interface TooltipEntry { dataKey: string; color: string; value: number; }
 interface CustomTooltipProps { active?: boolean; payload?: TooltipEntry[]; label?: string; }
@@ -29,7 +30,34 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   );
 };
 
-export function ProductivityChart() {
+interface ProductivityChartProps {
+  weeklyData?: WeeklyDataPoint[];
+}
+
+export function ProductivityChart({ weeklyData: propData }: ProductivityChartProps) {
+  const [weeklyData, setWeeklyData] = useState<WeeklyDataPoint[]>(propData ?? []);
+
+  useEffect(() => {
+    if (propData) {
+      setWeeklyData(propData);
+      return;
+    }
+    getStats()
+      .then(({ weeklyData: data }) => setWeeklyData(data))
+      .catch(console.error);
+  }, [propData]);
+
+  // Listen for new sessions to refresh chart
+  useEffect(() => {
+    const refresh = () => {
+      getStats()
+        .then(({ weeklyData: data }) => setWeeklyData(data))
+        .catch(console.error);
+    };
+    window.addEventListener("taskzen_session_completed", refresh);
+    return () => window.removeEventListener("taskzen_session_completed", refresh);
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
@@ -13,17 +13,24 @@ import { SettingsModal } from "@/components/SettingsModal";
 import { StudyNotes } from "@/components/StudyNotes";
 import { TodoList } from "@/components/TodoList";
 import { ProfilePage } from "@/components/ProfilePage";
+import { FocusWarningModal } from "@/components/FocusWarningModal";
+import { SessionCompletionModal } from "@/components/SessionCompletionModal";
+import { FocusAchievements } from "@/components/FocusAchievements";
+import { XPProgressBar } from "@/components/XPProgressBar";
+import { AmbientPlayer } from "@/components/AmbientPlayer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useTimer } from "@/hooks/useTimer";
+import { TimerProvider, useTimerContext } from "@/context/TimerContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTaskNotifications } from "@/hooks/useTaskNotifications";
-import { dummyStats } from "@/data/dummy";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
+import { useFocusGame } from "@/store/useFocusGame";
+import { getStats, getProfile, getTasks, saveGamification, type UserStats, type WeeklyDataPoint, type Task } from "@/lib/api";
 import { cn, formatMinutes } from "@/lib/utils";
 import {
   BookOpen, Brain, Zap, GraduationCap,
-  Lightbulb, Calendar, CheckCircle2, BarChart3
+  Lightbulb, Calendar, CheckCircle2, BarChart3, Trophy
 } from "lucide-react";
 
 const pageVariants = {
@@ -32,12 +39,19 @@ const pageVariants = {
   exit: { opacity: 0, y: -16 },
 };
 
-function DashboardOverview({ onNavigate, stats }: { onNavigate: (tab: string) => void; stats: typeof dummyStats }) {
+const EMPTY_STATS: UserStats = {
+  totalSessions: 0, totalMinutes: 0,
+  currentStreak: 0, longestStreak: 0,
+  todaySessions: 0, todayMinutes: 0,
+  weeklyProgress: 0, weeklyGoal: 600,
+};
+
+function DashboardOverview({ onNavigate, stats }: { onNavigate: (tab: string) => void; stats: UserStats }) {
   const quickStats = [
-    { icon: Zap, label: "Sessions Today", value: String(stats.todaySessions), color: "text-primary bg-primary/10" },
-    { icon: Calendar, label: "Day Streak", value: `${stats.currentStreak}`, color: "text-orange-500 bg-orange-100 dark:bg-orange-900/30" },
-    { icon: CheckCircle2, label: "Weekly Progress", value: `${Math.round((stats.weeklyProgress / stats.weeklyGoal) * 100)}%`, color: "text-green-600 bg-green-100 dark:bg-green-900/30" },
-    { icon: BarChart3, label: "Total Focus", value: formatMinutes(stats.totalMinutes), color: "text-blue-500 bg-blue-100 dark:bg-blue-900/30" },
+    { icon: Zap,         label: "Sessions Today",  value: String(stats.todaySessions),  color: "text-primary bg-primary/10" },
+    { icon: Calendar,    label: "Day Streak",       value: `${stats.currentStreak}`,     color: "text-orange-500 bg-orange-100 dark:bg-orange-900/30" },
+    { icon: CheckCircle2,label: "Weekly Progress",  value: `${Math.round((stats.weeklyProgress / stats.weeklyGoal) * 100)}%`, color: "text-green-600 bg-green-100 dark:bg-green-900/30" },
+    { icon: BarChart3,   label: "Total Focus",      value: formatMinutes(stats.totalMinutes), color: "text-blue-500 bg-blue-100 dark:bg-blue-900/30" },
   ];
 
   return (
@@ -147,26 +161,7 @@ function DashboardOverview({ onNavigate, stats }: { onNavigate: (tab: string) =>
   );
 }
 
-function NotesPlaceholder() {
-  return (
-    <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit">
-      <Card className="min-h-[400px] flex items-center justify-center">
-        <div className="text-center p-8">
-          <div className="w-16 h-16 rounded-2xl gradient-blue flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <BookOpen className="h-8 w-8 text-white" />
-          </div>
-          <h3 className="text-xl font-bold mb-2">Study Notes</h3>
-          <p className="text-muted-foreground text-sm max-w-xs">
-            Your personal study notes workspace. Jot down key concepts, summaries, and important ideas while studying.
-          </p>
-          <Badge variant="blue" className="mt-4">Coming Soon</Badge>
-        </div>
-      </Card>
-    </motion.div>
-  );
-}
-
-export default function DashboardPage() {
+function DashboardContent() {
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== "undefined") {
       return new URLSearchParams(window.location.search).get("tab") || "dashboard";
@@ -174,39 +169,126 @@ export default function DashboardPage() {
     return "dashboard";
   });
   const [focusModeActive, setFocusModeActive] = useState(false);
-  const [profileName, setProfileName] = useState("");
-  const [allTasks, setAllTasks] = useState<{ id: string; title: string; status: string; dueDate: string; dueTime: string }[]>([]);
+
+  // Real data from API
+  const [stats, setStats] = useState<UserStats>(EMPTY_STATS);
+  const [weeklyData, setWeeklyData] = useState<WeeklyDataPoint[]>([]);
+  const [avatar, setAvatar] = useState("");
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
+
   const { user, logout } = useAuth();
 
+  // ── Gamification ───────────────────────────────────────────────────────────
+  const focusGame = useFocusGame();
+  const sessionStartedRef = useRef(false);
+  const latestStatsRef = useRef<UserStats>(EMPTY_STATS);
+
+  const { status, mode, showBreakReminder, completedSessions, todaySessions, dismissBreak, settings, updateSettings } = useTimerContext();
+
+  // Fetch stats, profile, and tasks on mount
   useEffect(() => {
-    const readTasks = () => {
-      try {
-        const r = localStorage.getItem("taskzen_todos");
-        setAllTasks(r ? JSON.parse(r) : []);
-      } catch {}
+    getStats()
+      .then(({ stats: s, weeklyData: w }) => {
+        setStats(s);
+        setWeeklyData(w);
+        latestStatsRef.current = s;
+      })
+      .catch(console.error);
+
+    getProfile()
+      .then(({ profile }) => {
+        setAvatar(profile.avatar);
+        // Hydrate gamification from server (server wins over localStorage)
+        try {
+          const ids = JSON.parse(profile.achievements || "[]");
+          focusGame.initFromProfile(profile.xp, ids, profile.totalDistractions, profile.perfectSessions);
+        } catch {}
+      })
+      .catch(console.error);
+
+    getTasks()
+      .then(({ tasks }) => setAllTasks(tasks))
+      .catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Track when timer starts a new focus session
+  useEffect(() => {
+    if (status === "running" && mode === "focus") {
+      if (!sessionStartedRef.current) {
+        sessionStartedRef.current = true;
+        focusGame.startSession();
+      }
+    } else if (status === "idle") {
+      sessionStartedRef.current = false;
+    }
+  }, [status, mode, focusGame]);
+
+  // Distraction detection via Page Visibility API
+  usePageVisibility(
+    () => focusGame.recordDistraction(),
+    focusGame.isSessionActive
+  );
+
+  // Refresh stats + award XP when a session completes
+  useEffect(() => {
+    const onComplete = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { durationMinutes: number; isPartial: boolean } | undefined;
+      const durationMinutes = detail?.durationMinutes ?? 0;
+
+      getStats()
+        .then(({ stats: s, weeklyData: w }) => {
+          setStats(s);
+          setWeeklyData(w);
+          latestStatsRef.current = s;
+
+          const completionData = focusGame.finishSession(
+            durationMinutes,
+            s.totalSessions,
+            s.totalMinutes,
+            s.currentStreak
+          );
+
+          // Persist gamification state to backend
+          const state = useFocusGame.getState();
+          saveGamification({
+            xp: state.xp,
+            achievements: JSON.stringify(state.unlockedIds),
+            totalDistractions: state.totalDistractions,
+            perfectSessions: state.perfectSessions,
+          }).catch(console.error);
+
+          return completionData;
+        })
+        .catch(console.error);
     };
-    readTasks();
-    window.addEventListener("taskzen_todos_updated", readTasks);
-    return () => window.removeEventListener("taskzen_todos_updated", readTasks);
+    window.addEventListener("taskzen_session_completed", onComplete);
+    return () => window.removeEventListener("taskzen_session_completed", onComplete);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep tasks in sync when TodoList updates them
+  useEffect(() => {
+    const refresh = () => {
+      getTasks()
+        .then(({ tasks }) => setAllTasks(tasks))
+        .catch(console.error);
+    };
+    window.addEventListener("taskzen_todos_updated", refresh);
+    return () => window.removeEventListener("taskzen_todos_updated", refresh);
+  }, []);
+
+  // Sync avatar from profile updates
+  useEffect(() => {
+    const onProfileUpdated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.avatar !== undefined) setAvatar(detail.avatar);
+    };
+    window.addEventListener("taskzen_profile_updated", onProfileUpdated);
+    return () => window.removeEventListener("taskzen_profile_updated", onProfileUpdated);
   }, []);
 
   useTaskNotifications(allTasks);
-
-  useEffect(() => {
-    const readName = () => {
-      try {
-        const r = localStorage.getItem("taskzen_profile");
-        setProfileName(r ? JSON.parse(r).fullName ?? "" : "");
-      } catch {}
-    };
-    readName();
-    window.addEventListener("taskzen_profile_updated", readName);
-    return () => window.removeEventListener("taskzen_profile_updated", readName);
-  }, []);
-  const {
-    showBreakReminder, completedSessions, todaySessions,
-    dismissBreak, settings, updateSettings,
-  } = useTimer();
 
   const handleTabChange = useCallback((tab: string) => {
     setActiveTab(tab);
@@ -215,7 +297,8 @@ export default function DashboardPage() {
 
   const handleToggleFocusMode = () => setFocusModeActive((p) => !p);
 
-  const statsWithToday = { ...dummyStats, todaySessions: dummyStats.todaySessions + todaySessions };
+  // Merge live timer sessions with DB stats
+  const liveStats = { ...stats, todaySessions: stats.todaySessions + todaySessions };
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -225,8 +308,10 @@ export default function DashboardPage() {
         <Header
           activeTab={activeTab}
           onTabChange={handleTabChange}
-          streak={dummyStats.currentStreak}
-          username={user?.username || profileName}
+          streak={stats.currentStreak}
+          username={user?.username}
+          avatar={avatar}
+          tasks={allTasks}
           onLogout={logout}
         />
 
@@ -234,7 +319,7 @@ export default function DashboardPage() {
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div key="dashboard" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
-                <DashboardOverview onNavigate={handleTabChange} stats={statsWithToday} />
+                <DashboardOverview onNavigate={handleTabChange} stats={liveStats} />
               </motion.div>
             )}
 
@@ -249,12 +334,22 @@ export default function DashboardPage() {
                     <FocusTimer
                       focusModeActive={focusModeActive}
                       onToggleFocusMode={handleToggleFocusMode}
+                      disableKeyboard={focusModeActive}
                     />
+                    <AmbientPlayer />
                     <QuotesWidget />
                   </div>
                   <div className="lg:col-span-2 space-y-4">
                     <h2 className="text-xl font-bold mb-1">{"Today's Progress"}</h2>
-                    <SessionStats stats={statsWithToday} todaySessions={todaySessions} />
+                    {/* XP bar */}
+                    <XPProgressBar xp={focusGame.xp} />
+                    {/* Distraction count for active session */}
+                    {focusGame.isSessionActive && focusGame.sessionDistractions > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                        ⚠️ {focusGame.sessionDistractions} distraction{focusGame.sessionDistractions > 1 ? "s" : ""} this session
+                      </p>
+                    )}
+                    <SessionStats stats={liveStats} todaySessions={todaySessions} />
                   </div>
                 </div>
               </motion.div>
@@ -269,7 +364,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="lg:col-span-2 space-y-4">
                     <h2 className="text-xl font-bold mb-4">Quick Stats</h2>
-                    <SessionStats stats={statsWithToday} todaySessions={todaySessions} />
+                    <SessionStats stats={liveStats} todaySessions={todaySessions} />
                     <QuotesWidget />
                   </div>
                 </div>
@@ -280,8 +375,15 @@ export default function DashboardPage() {
               <motion.div key="stats" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
                 <h2 className="text-xl font-bold mb-4">Productivity Analytics</h2>
                 <div className="space-y-5">
-                  <SessionStats stats={statsWithToday} todaySessions={todaySessions} />
-                  <ProductivityChart />
+                  <SessionStats stats={liveStats} todaySessions={todaySessions} />
+                  <ProductivityChart weeklyData={weeklyData} />
+                  <div>
+                    <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+                      <Trophy className="h-4 w-4 text-amber-500" />
+                      Achievements & Levels
+                    </h3>
+                    <FocusAchievements xp={focusGame.xp} unlockedIds={focusGame.unlockedIds} />
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -302,7 +404,8 @@ export default function DashboardPage() {
               <motion.div key="profile" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
                 <ProfilePage
                   username={user?.username}
-                  onProfileChange={() => window.dispatchEvent(new Event("taskzen_profile_updated"))}
+                  userEmail={user?.email}
+                  onProfileChange={(newAvatar) => setAvatar(newAvatar)}
                 />
               </motion.div>
             )}
@@ -345,6 +448,22 @@ export default function DashboardPage() {
         onDismiss={dismissBreak}
       />
 
+      {/* Gamification modals */}
+      <FocusWarningModal
+        show={focusGame.showWarning}
+        warningCount={focusGame.warningCount}
+        distractions={focusGame.sessionDistractions}
+        onReturn={focusGame.dismissWarning}
+        onEndSession={() => { focusGame.dismissWarning(); }}
+      />
+
+      <SessionCompletionModal
+        show={focusGame.showCompletion}
+        data={focusGame.completionData}
+        currentXp={focusGame.xp}
+        onClose={focusGame.dismissCompletion}
+      />
+
       <AnimatePresence>
         {focusModeActive && (
           <motion.div
@@ -374,5 +493,13 @@ export default function DashboardPage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <TimerProvider>
+      <DashboardContent />
+    </TimerProvider>
   );
 }

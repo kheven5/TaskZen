@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Timer, BarChart2, BookOpen, Settings, Zap, Brain, Home, ListTodo, UserCircle } from "lucide-react";
+import { Timer, BarChart2, BookOpen, Settings, Zap, Brain, Home, ListTodo, UserCircle, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeLogo } from "@/components/ThemeLogo";
