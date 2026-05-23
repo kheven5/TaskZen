@@ -7,7 +7,7 @@ import {
   CalendarDays, BookMarked
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { getProfile, updateProfile, type UserProfile } from "@/lib/api";
+import { getProfile, updateProfile } from "@/lib/api";
 
 interface Profile {
   avatar:        string;
@@ -65,7 +65,7 @@ interface ProfilePageProps {
   onProfileChange?: (avatar: string) => void;
 }
 
-export function ProfilePage({ username, userEmail, onProfileChange }: ProfilePageProps) {
+export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
   const [profile, setProfile] = useState<Profile>(defaultProfile());
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<keyof Profile | null>(null);
@@ -195,7 +195,7 @@ export function ProfilePage({ username, userEmail, onProfileChange }: ProfilePag
                   )}
                 </motion.div>
               )}
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+              <input ref={fileRef} type="file" accept="image/*" aria-label="Upload profile photo" className="hidden" onChange={handleAvatarUpload} />
             </div>
 
             <div className="flex-1 text-center sm:text-left">
@@ -259,6 +259,7 @@ export function ProfilePage({ username, userEmail, onProfileChange }: ProfilePag
                             value={draft}
                             onChange={e => setDraft(e.target.value)}
                             autoFocus
+                            aria-label={field.label}
                             className="flex-1 text-sm px-2 py-1 bg-background border border-border text-foreground focus:outline-none focus:border-foreground/40 transition-colors"
                           >
                             <option value="">-- Select --</option>
@@ -267,6 +268,7 @@ export function ProfilePage({ username, userEmail, onProfileChange }: ProfilePag
                         ) : (
                           <input
                             type="text"
+                            aria-label={field.label}
                             value={draft}
                             onChange={e => setDraft(e.target.value)}
                             autoFocus
@@ -274,10 +276,10 @@ export function ProfilePage({ username, userEmail, onProfileChange }: ProfilePag
                             className="flex-1 text-sm px-2 py-1 bg-background border border-border text-foreground focus:outline-none focus:border-foreground/40 transition-colors"
                           />
                         )}
-                        <button onClick={confirmEdit} className="text-green-500 hover:text-green-600 transition-colors">
+                        <button aria-label="Confirm" onClick={confirmEdit} className="text-green-500 hover:text-green-600 transition-colors">
                           <Check className="h-4 w-4" />
                         </button>
-                        <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground transition-colors">
+                        <button aria-label="Cancel" onClick={cancelEdit} className="text-muted-foreground hover:text-foreground transition-colors">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
@@ -288,6 +290,7 @@ export function ProfilePage({ username, userEmail, onProfileChange }: ProfilePag
                         </p>
                         {!field.readOnly && (
                           <button
+                            aria-label={`Edit ${field.label}`}
                             onClick={() => startEdit(field.key)}
                             className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all shrink-0"
                           >

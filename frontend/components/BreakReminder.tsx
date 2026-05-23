@@ -30,6 +30,7 @@ export function BreakReminder({ show, sessionsCompleted, onStartBreak, onDismiss
             className="relative bg-card border border-border rounded-lg p-8 max-w-sm w-full shadow-xl text-center"
           >
             <button
+              aria-label="Dismiss"
               onClick={onDismiss}
               className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
             >

@@ -143,31 +143,32 @@ export function AmbientPlayer() {
                     onLoad={handleIframeReady}
                     allow="autoplay; encrypted-media"
                     allowFullScreen
-                    className="w-full rounded-xl border border-border"
-                    style={{ height: 160 }}
+                    className="w-full rounded-xl border border-border h-[160px]"
                     title="YouTube music player"
                   />
                   {/* Playback controls */}
                   <div className="flex items-center gap-3">
                     <button
+                      aria-label={isPlaying ? "Pause" : "Play"}
                       onClick={togglePlay}
                       className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors shrink-0"
                     >
                       {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                     </button>
-                    <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
                     <input
                       type="range"
+                      aria-label="Volume"
                       min={0}
                       max={100}
                       value={volume}
                       onChange={handleVolume}
                       className="flex-1 h-1.5 accent-primary cursor-pointer"
                     />
-                    <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
                     <button
+                      aria-label="Stop"
                       onClick={handleStop}
-                      title="Stop"
                       className="w-7 h-7 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -221,12 +222,14 @@ export function AmbientPlayer() {
             {isPlaying && activeEmbed && (
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
+                  aria-label={isPlaying ? "Pause" : "Play"}
                   onClick={togglePlay}
                   className="w-6 h-6 rounded-md bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
                 >
                   {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                 </button>
                 <button
+                  aria-label="Stop"
                   onClick={handleStop}
                   className="w-6 h-6 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"
                 >
@@ -237,6 +240,7 @@ export function AmbientPlayer() {
 
             {/* Expand/collapse chevron */}
             <button
+              aria-label={expanded ? "Collapse player" : "Expand player"}
               onClick={() => setExpanded(p => !p)}
               className="p-1 rounded-md hover:bg-accent/10 text-muted-foreground transition-colors shrink-0"
             >

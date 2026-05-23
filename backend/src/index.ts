@@ -11,6 +11,7 @@ import profileRouter from "./routes/profile";
 import timerRouter from "./routes/timer";
 import sessionsRouter from "./routes/sessions";
 import aiRouter from "./routes/ai";
+import reviewersRouter from "./routes/reviewers";
 import passport from "./lib/passport";
 
 const app = express();
@@ -46,6 +47,7 @@ app.use("/api/user/profile", profileRouter);
 app.use("/api/timer-settings", timerRouter);
 app.use("/api/sessions", sessionsRouter);
 app.use("/api/ai", aiRouter);
+app.use("/api/reviewers", reviewersRouter);
 
 app.listen(PORT, () => {
   console.log(`TaskZen backend running on http://localhost:${PORT}`);

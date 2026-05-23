@@ -1,12 +1,12 @@
-import { Router, Response } from "express";
+import { Router, RequestHandler } from "express";
 import { prisma } from "../lib/prisma";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireAuth, h } from "../middleware/auth";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth as RequestHandler);
 
 // POST /api/sessions — record a completed study session
-router.post("/", async (req: AuthRequest, res: Response): Promise<void> => {
+router.post("/", h(async (req, res) => {
   const { date, duration, mode, completed, subject } = req.body as {
     date?: string;
     duration?: number;
@@ -31,15 +31,13 @@ router.post("/", async (req: AuthRequest, res: Response): Promise<void> => {
     },
   });
   res.status(201).json({ session });
-});
+}));
 
 // GET /api/sessions/stats — aggregated stats for the current user
-router.get("/stats", async (req: AuthRequest, res: Response): Promise<void> => {
+router.get("/stats", h(async (req, res) => {
   const userId = req.user!.userId;
-
   const today = new Date().toISOString().slice(0, 10);
 
-  // Compute the start of the current week (last 7 days)
   const weekAgo = new Date();
   weekAgo.setDate(weekAgo.getDate() - 6);
   const weekStart = weekAgo.toISOString().slice(0, 10);
@@ -56,15 +54,10 @@ router.get("/stats", async (req: AuthRequest, res: Response): Promise<void> => {
     prisma.timerSettings.findUnique({ where: { userId } }),
   ]);
 
-  // Today's stats
   const todaySessions = allFocusSessions.filter(s => s.date === today);
   const todayMinutes = todaySessions.reduce((sum, s) => sum + s.duration, 0);
-
-  // Total stats
   const totalSessions = allFocusSessions.length;
   const totalMinutes = allFocusSessions.reduce((sum, s) => sum + s.duration, 0);
-
-  // Weekly progress
   const weeklyProgress = weeklySessions.reduce((sum, s) => sum + s.duration, 0);
 
   // Streak calculation
@@ -78,24 +71,23 @@ router.get("/stats", async (req: AuthRequest, res: Response): Promise<void> => {
     if (!prevDate) {
       runningStreak = 1;
     } else {
-      const prev = new Date(prevDate).getTime();
-      const curr = new Date(date).getTime();
-      const diffDays = Math.round((curr - prev) / 86400000);
+      const diffDays = Math.round(
+        (new Date(date).getTime() - new Date(prevDate).getTime()) / 86400000,
+      );
       runningStreak = diffDays === 1 ? runningStreak + 1 : 1;
     }
     longestStreak = Math.max(longestStreak, runningStreak);
     prevDate = date;
   }
 
-  // Streak is current only if last session date is today or yesterday
   if (prevDate) {
-    const todayMs = new Date(today).getTime();
-    const lastMs = new Date(prevDate).getTime();
-    const diffDays = Math.round((todayMs - lastMs) / 86400000);
+    const diffDays = Math.round(
+      (new Date(today).getTime() - new Date(prevDate).getTime()) / 86400000,
+    );
     currentStreak = diffDays <= 1 ? runningStreak : 0;
   }
 
-  // Weekly chart data (last 7 days by day name)
+  // Weekly chart (last 7 days)
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const allLastWeekSessions = await prisma.studySession.findMany({
     where: { userId, completed: true, date: { gte: weekStart } },
@@ -106,10 +98,13 @@ router.get("/stats", async (req: AuthRequest, res: Response): Promise<void> => {
     d.setDate(weekAgo.getDate() + i);
     const dateStr = d.toISOString().slice(0, 10);
     const daySessions = allLastWeekSessions.filter(s => s.date === dateStr);
-    const focusMinutes = daySessions.filter(s => s.mode === "focus").reduce((sum, s) => sum + s.duration, 0);
-    const sessions = daySessions.filter(s => s.mode === "focus").length;
-    const breaks = daySessions.filter(s => s.mode !== "focus").length;
-    return { day: dayNames[d.getDay()], date: dateStr, focusMinutes, sessions, breaks };
+    return {
+      day: dayNames[d.getDay()],
+      date: dateStr,
+      focusMinutes: daySessions.filter(s => s.mode === "focus").reduce((sum, s) => sum + s.duration, 0),
+      sessions: daySessions.filter(s => s.mode === "focus").length,
+      breaks: daySessions.filter(s => s.mode !== "focus").length,
+    };
   });
 
   res.json({
@@ -125,6 +120,6 @@ router.get("/stats", async (req: AuthRequest, res: Response): Promise<void> => {
     },
     weeklyData,
   });
-});
+}));
 
 export default router;

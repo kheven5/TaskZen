@@ -129,8 +129,8 @@ export function SessionStats({ stats, todaySessions = 0 }: SessionStatsProps) {
                 {!editing && (
                   <button
                     onClick={startEdit}
+                    aria-label="Edit weekly goal"
                     className="text-muted-foreground hover:text-foreground transition-colors"
-                    title="Edit goal"
                   >
                     <Pencil className="h-3 w-3" />
                   </button>
@@ -150,10 +150,10 @@ export function SessionStats({ stats, todaySessions = 0 }: SessionStatsProps) {
                     placeholder="hrs"
                   />
                   <span className="text-xs text-muted-foreground">hrs/week</span>
-                  <button onClick={confirmEdit} className="text-green-500 hover:text-green-600 transition-colors">
+                  <button onClick={confirmEdit} aria-label="Confirm" className="text-green-500 hover:text-green-600 transition-colors">
                     <Check className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={cancelEdit} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <button onClick={cancelEdit} aria-label="Cancel" className="text-muted-foreground hover:text-foreground transition-colors">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>

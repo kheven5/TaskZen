@@ -1,19 +1,19 @@
-import { Router, Response } from "express";
+import { Router, RequestHandler } from "express";
 import { prisma } from "../lib/prisma";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireAuth, h } from "../middleware/auth";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth as RequestHandler);
 
-router.get("/", async (req: AuthRequest, res: Response): Promise<void> => {
+router.get("/", h(async (req, res) => {
   const notes = await prisma.note.findMany({
     where: { userId: req.user!.userId },
     orderBy: { updatedAt: "desc" },
   });
   res.json({ notes });
-});
+}));
 
-router.post("/", async (req: AuthRequest, res: Response): Promise<void> => {
+router.post("/", h(async (req, res) => {
   const { title, content, category } = req.body as {
     title?: string;
     content?: string;
@@ -34,10 +34,10 @@ router.post("/", async (req: AuthRequest, res: Response): Promise<void> => {
     },
   });
   res.status(201).json({ note });
-});
+}));
 
-router.put("/:id", async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
+router.put("/:id", h(async (req, res) => {
+  const id = req.params.id as string;
   const existing = await prisma.note.findFirst({ where: { id, userId: req.user!.userId } });
   if (!existing) {
     res.status(404).json({ error: "Note not found" });
@@ -59,10 +59,10 @@ router.put("/:id", async (req: AuthRequest, res: Response): Promise<void> => {
     },
   });
   res.json({ note });
-});
+}));
 
-router.delete("/:id", async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id } = req.params;
+router.delete("/:id", h(async (req, res) => {
+  const id = req.params.id as string;
   const existing = await prisma.note.findFirst({ where: { id, userId: req.user!.userId } });
   if (!existing) {
     res.status(404).json({ error: "Note not found" });
@@ -70,6 +70,6 @@ router.delete("/:id", async (req: AuthRequest, res: Response): Promise<void> => 
   }
   await prisma.note.delete({ where: { id } });
   res.json({ message: "Deleted" });
-});
+}));
 
 export default router;

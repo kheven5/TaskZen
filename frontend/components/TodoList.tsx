@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, Trash2, Pencil, X, Check, SlidersHorizontal,
-  Calendar, Tag, Flag, Clock, CheckCircle2, Circle, Loader2, Bell, BellOff
+  Calendar, Tag, Flag, Clock, CheckCircle2, Circle, Loader2, Bell
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getTasks, createTask, updateTask, deleteTask, type Task } from "@/lib/api";
@@ -210,6 +210,7 @@ export function TodoList() {
                 Enable
               </button>
               <button
+                aria-label="Dismiss"
                 onClick={() => setNotifPermission("denied")}
                 className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-800 transition-colors"
               >
@@ -307,9 +308,9 @@ export function TodoList() {
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Calendar className="h-3 w-3" />Due Date</label>
                   <div className="flex items-center gap-2">
-                    <input type="date" value={fDate} onChange={e => setFDate(e.target.value)}
+                    <input type="date" aria-label="Filter by due date" value={fDate} onChange={e => setFDate(e.target.value)}
                       className="flex-1 text-xs px-2 py-1.5 bg-background border border-border text-foreground focus:outline-none focus:border-foreground/40 transition-colors" />
-                    {fDate && <button onClick={() => setFDate("")} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
+                    {fDate && <button aria-label="Clear date filter" onClick={() => setFDate("")} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
                   </div>
                 </div>
               </CardContent>
@@ -370,10 +371,10 @@ export function TodoList() {
                             {task.title}
                           </p>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                            <button onClick={() => openEdit(task)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                            <button aria-label="Edit task" onClick={() => openEdit(task)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                               <Pencil className="h-3 w-3" />
                             </button>
-                            <button onClick={() => setDeleteId(task.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors">
+                            <button aria-label="Delete task" onClick={() => setDeleteId(task.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors">
                               <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
@@ -428,7 +429,7 @@ export function TodoList() {
             >
               <div className="flex items-center justify-between p-4 border-b border-border">
                 <h3 className="text-sm font-semibold">{editTask ? "Edit Task" : "New Task"}</h3>
-                <button onClick={() => setModalOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <button aria-label="Close" onClick={() => setModalOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
                   <X className="h-4 w-4" />
                 </button>
               </div>
@@ -451,13 +452,13 @@ export function TodoList() {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Calendar className="h-3 w-3" />Due Date</label>
-                    <input type="date" value={form.dueDate}
+                    <input type="date" aria-label="Due date" value={form.dueDate}
                       onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
                       className="w-full text-xs px-2 py-1.5 bg-background border border-border text-foreground focus:outline-none focus:border-foreground/40 transition-colors" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground font-medium flex items-center gap-1"><Clock className="h-3 w-3" />Time</label>
-                    <input type="time" value={form.dueTime}
+                    <input type="time" aria-label="Due time" value={form.dueTime}
                       onChange={e => setForm(f => ({ ...f, dueTime: e.target.value }))}
                       className="w-full text-xs px-2 py-1.5 bg-background border border-border text-foreground focus:outline-none focus:border-foreground/40 transition-colors" />
                   </div>

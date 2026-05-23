@@ -1,6 +1,6 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, RequestHandler } from "express";
 import { prisma } from "../lib/prisma";
-import { optionalAuth, AuthRequest } from "../middleware/auth";
+import { optionalAuth, h } from "../middleware/auth";
 
 const router = Router();
 
@@ -40,7 +40,7 @@ router.get("/testimonials", async (_req: Request, res: Response): Promise<void> 
 
 // POST /api/landing/testimonials
 // Submit a new testimonial (goes into review queue, approved=false by default)
-router.post("/testimonials", optionalAuth, async (req: AuthRequest, res: Response): Promise<void> => {
+router.post("/testimonials", optionalAuth as RequestHandler, h(async (req, res) => {
   const { quote, name, role, rating } = req.body as {
     quote?: string;
     name?: string;
@@ -73,6 +73,6 @@ router.post("/testimonials", optionalAuth, async (req: AuthRequest, res: Respons
   });
 
   res.status(201).json({ message: "Testimonial submitted. It will appear after review." });
-});
+}));
 
 export default router;

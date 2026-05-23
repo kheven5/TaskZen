@@ -21,6 +21,7 @@ model User {
   profile       UserProfile?
   timerSettings TimerSettings?
   sessions      StudySession[]
+  reviewers     Reviewer[]
 }
 
 model Testimonial {
@@ -106,4 +107,21 @@ model StudySession {
   completed Boolean  @default(true)
   subject   String   @default("")
   createdAt DateTime @default(now())
+}
+
+model Reviewer {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic            String
+  originalFileName String?
+  fileType         String?
+  generatedSummary String?
+  reviewerContent  String?
+  keyConcepts      Json?
+  flashcards       Json?
+  quizzes          Json?
+  examQuestions    Json?
+  bookmarked       Boolean  @default(false)
+  createdAt        DateTime @default(now())
 }

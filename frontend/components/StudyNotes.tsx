@@ -177,12 +177,13 @@ export function StudyNotes() {
                   <div className="flex items-center gap-2">
                     <input
                       type="date"
+                      aria-label="Filter by date"
                       value={filterDate}
                       onChange={e => setFilterDate(e.target.value)}
                       className="flex-1 text-xs px-2 py-1.5 bg-background border border-border text-foreground focus:outline-none focus:border-foreground/40 transition-colors"
                     />
                     {filterDate && (
-                      <button onClick={() => setFilterDate("")} className="text-muted-foreground hover:text-foreground transition-colors">
+                      <button aria-label="Clear date filter" onClick={() => setFilterDate("")} className="text-muted-foreground hover:text-foreground transition-colors">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     )}
@@ -234,10 +235,10 @@ export function StudyNotes() {
                         {note.title}
                       </h3>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                        <button onClick={() => openEdit(note)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                        <button aria-label="Edit note" onClick={() => openEdit(note)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                           <Pencil className="h-3 w-3" />
                         </button>
-                        <button onClick={() => setDeleteId(note.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors">
+                        <button aria-label="Delete note" onClick={() => setDeleteId(note.id)} className="p-1 text-muted-foreground hover:text-red-500 transition-colors">
                           <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
@@ -280,7 +281,7 @@ export function StudyNotes() {
             >
               <div className="flex items-center justify-between p-4 border-b border-border">
                 <h3 className="text-sm font-semibold">{editingNote ? "Edit Note" : "New Note"}</h3>
-                <button onClick={() => setModalOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <button aria-label="Close" onClick={() => setModalOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors">
                   <X className="h-4 w-4" />
                 </button>
               </div>

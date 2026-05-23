@@ -134,6 +134,7 @@ function FileUploadZone({
           </p>
         </div>
         <button
+          aria-label="Remove file"
           onClick={() => onFileChange(null)}
           className="p-1.5 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
         >
@@ -166,6 +167,7 @@ function FileUploadZone({
       <input
         ref={inputRef}
         type="file"
+        aria-label="Upload study material"
         className="hidden"
         accept=".pdf,.doc,.docx,.ppt,.pptx"
         onChange={handleChange}
@@ -287,6 +289,7 @@ function ReviewerCard({
               ) : (
                 <>
                   <button
+                    aria-label="Delete reviewer"
                     onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}
                     className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                   >
@@ -321,7 +324,7 @@ function FlashcardItem({ card, index }: { card: Flashcard; index: number }) {
       className="cursor-pointer select-none"
       onClick={() => setFlipped(f => !f)}
     >
-      <div className="relative rounded-2xl border border-border overflow-hidden" style={{ minHeight: 140 }}>
+      <div className="relative rounded-2xl border border-border overflow-hidden min-h-[140px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={flipped ? "back" : "front"}
@@ -330,12 +333,11 @@ function FlashcardItem({ card, index }: { card: Flashcard; index: number }) {
             exit={{ opacity: 0, rotateY: -90 }}
             transition={{ duration: 0.2 }}
             className={cn(
-              "p-5 flex flex-col justify-between gap-3",
+              "p-5 flex flex-col justify-between gap-3 min-h-[140px]",
               flipped
                 ? "bg-primary/5"
                 : "bg-card",
             )}
-            style={{ minHeight: 140 }}
           >
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
@@ -508,6 +510,7 @@ function ReviewerViewer({
       {/* Header */}
       <div className="flex items-start gap-3">
         <button
+          aria-label="Go back"
           onClick={onBack}
           className="mt-0.5 p-2 rounded-xl border border-border hover:bg-accent/10 transition-colors shrink-0"
         >
@@ -714,18 +717,19 @@ function ReviewerViewer({
                 ) : (
                   <ol className="space-y-3">
                     {examQs.map((q, i) => (
-                      <motion.li
-                        key={i}
-                        initial={{ opacity: 0, x: -8 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.04 }}
-                        className="flex gap-3 p-3 rounded-xl bg-muted/40 border border-border"
-                      >
-                        <span className="text-xs font-bold text-primary bg-primary/10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5">
-                          {i + 1}
-                        </span>
-                        <p className="text-sm leading-relaxed">{q}</p>
-                      </motion.li>
+                      <li key={i}>
+                        <motion.div
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.04 }}
+                          className="flex gap-3 p-3 rounded-xl bg-muted/40 border border-border"
+                        >
+                          <span className="text-xs font-bold text-primary bg-primary/10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                            {i + 1}
+                          </span>
+                          <p className="text-sm leading-relaxed">{q}</p>
+                        </motion.div>
+                      </li>
                     ))}
                   </ol>
                 )}
@@ -959,12 +963,18 @@ export function ReviewerLibrary() {
                   )}
 
                   {/* Error */}
-                  {genError && (
-                    <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-                      <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                      {genError}
-                    </div>
-                  )}
+                  {genError && (() => {
+                    const isRateLimit = genError.toLowerCase().includes("rate-limited") || genError.toLowerCase().includes("wait a minute");
+                    return (
+                      <div className={`flex items-start gap-2 p-3 rounded-xl text-sm border ${isRateLimit ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700/40 text-amber-800 dark:text-amber-300" : "bg-destructive/10 border-destructive/20 text-destructive"}`}>
+                        <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-medium">{isRateLimit ? "Rate limit reached" : "Request failed"}</p>
+                          <p className="mt-0.5 opacity-90">{genError}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Generate button */}
                   <Button
@@ -1032,6 +1042,7 @@ export function ReviewerLibrary() {
               />
               {search && (
                 <button
+                  aria-label="Clear search"
                   onClick={() => setSearch("")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >

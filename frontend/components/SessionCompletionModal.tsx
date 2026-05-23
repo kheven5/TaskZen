@@ -104,6 +104,7 @@ export function SessionCompletionModal({ show, data, currentXp, onClose }: Sessi
             >
               {/* Close */}
               <button
+                aria-label="Close"
                 onClick={onClose}
                 className="absolute right-3 top-3 z-10 rounded-lg p-1 text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
               >

@@ -1,8 +1,8 @@
-import { Router, Request, Response } from "express";
+import { Router, Request, Response, RequestHandler } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma";
 import { signToken } from "../lib/jwt";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireAuth, h } from "../middleware/auth";
 import passport from "../lib/passport";
 
 const router = Router();
@@ -167,8 +167,8 @@ router.post("/logout", (req: Request, res: Response): void => {
 });
 
 // GET /api/auth/me
-router.get("/me", requireAuth, (req: AuthRequest, res: Response): void => {
+router.get("/me", requireAuth as RequestHandler, h(async (req, res) => {
   res.json({ user: req.user });
-});
+}));
 
 export default router;

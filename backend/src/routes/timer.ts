@@ -1,20 +1,20 @@
-import { Router, Response } from "express";
+import { Router, RequestHandler } from "express";
 import { prisma } from "../lib/prisma";
-import { requireAuth, AuthRequest } from "../middleware/auth";
+import { requireAuth, h } from "../middleware/auth";
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth as RequestHandler);
 
-router.get("/", async (req: AuthRequest, res: Response): Promise<void> => {
+router.get("/", h(async (req, res) => {
   const userId = req.user!.userId;
   let settings = await prisma.timerSettings.findUnique({ where: { userId } });
   if (!settings) {
     settings = await prisma.timerSettings.create({ data: { userId } });
   }
   res.json({ settings });
-});
+}));
 
-router.put("/", async (req: AuthRequest, res: Response): Promise<void> => {
+router.put("/", h(async (req, res) => {
   const userId = req.user!.userId;
   const {
     focusDuration, shortBreakDuration, longBreakDuration,
@@ -50,6 +50,6 @@ router.put("/", async (req: AuthRequest, res: Response): Promise<void> => {
     create: { userId, ...patch },
   });
   res.json({ settings });
-});
+}));
 
 export default router;
