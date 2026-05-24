@@ -96,7 +96,7 @@ function GeneratingOverlay() {
             {PROGRESS_MESSAGES[msgIdx]}
           </motion.p>
         </AnimatePresence>
-        <p className="text-xs text-muted-foreground mt-2">This may take up to 30 seconds</p>
+        <p className="text-xs text-muted-foreground mt-2">Usually 15–45 seconds depending on content size</p>
       </div>
     </motion.div>
   );

@@ -26,16 +26,11 @@ const GEMINI_KEYS = [
   process.env.GEMINI_API_KEY_3,
 ].filter((k): k is string => Boolean(k));
 
-// Ordered by preference for study-reviewer generation.
-// Each key × model pair has its own independent quota pool.
-// NOTE: gemini-2.0-flash is deprecated June 1 2026 — removed.
 const GEMINI_MODELS = [
-  "gemini-2.5-flash",       // stable · balanced · 1M ctx · best free-tier pick
-  "gemini-3.5-flash",       // stable · fast · excellent for agentic text tasks
-  "gemini-2.5-pro",         // stable · premium reasoning · long-context
-  "gemini-2.5-flash-lite",  // stable · lightweight fallback
-  "gemini-3.1-flash-lite",  // stable · ultra-fast budget option
-  "gemini-3.1-pro-preview", // preview · heavy reasoning (may need paid tier)
+  "gemini-2.0-flash",
+  "gemini-2.5-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro",
 ];
 
 function isRetryableError(err: unknown): boolean {
@@ -113,36 +108,54 @@ async function callGemini(parts: GeminiPart[]): Promise<string> {
 
 // ── Prompts ───────────────────────────────────────────────────────────────────
 
-function buildTopicPrompt(topic: string): string {
-  return `Generate a comprehensive academic study reviewer for the topic: "${topic}"
+function buildPrompt(source: string): string {
+  return `${source}
 
-Return ONLY a valid JSON object — no markdown, no code blocks, no extra text:
+Generate a student study reviewer. Return ONLY a valid JSON object — no markdown, no code blocks:
 {
-  "summary": "3-4 paragraph comprehensive overview of the topic",
-  "studyNotes": "Detailed notes in markdown with ## and ### headers and bullet points",
-  "keyConcepts": [{"term": "concept name", "definition": "clear, concise definition"}],
-  "flashcards": [{"front": "question or term", "back": "answer or definition"}],
-  "quizzes": [{"question": "question text", "choices": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "why this is correct"}],
-  "examQuestions": ["open-ended exam question"]
+  "summary": "2-3 paragraph overview",
+  "studyNotes": "Study notes in markdown with ## headers and bullet points",
+  "keyConcepts": [{"term": "term", "definition": "definition"}],
+  "flashcards": [{"front": "question", "back": "answer"}],
+  "quizzes": [{"question": "question", "choices": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "why correct"}],
+  "examQuestions": ["exam question"]
 }
 
-Requirements: 8-12 keyConcepts, 10-15 flashcards, 8-10 quiz questions, 5-8 exam questions.`;
+Requirements: 6-8 keyConcepts, 8-10 flashcards, 5-6 quiz questions (A/B/C/D), 4-5 exam questions.`;
 }
 
-function buildFilePrompt(fileName: string): string {
-  return `Analyze the provided document "${fileName}" and generate a comprehensive study reviewer based on its content.
+async function extractTextFromBuffer(buffer: Buffer, mimetype: string): Promise<string> {
+  if (mimetype === "application/pdf") return "";
 
-Return ONLY a valid JSON object — no markdown, no code blocks, no extra text:
-{
-  "summary": "3-4 paragraph overview of the document's main content",
-  "studyNotes": "Detailed notes in markdown with ## and ### headers and bullet points",
-  "keyConcepts": [{"term": "concept name", "definition": "clear, concise definition"}],
-  "flashcards": [{"front": "question or term", "back": "answer or definition"}],
-  "quizzes": [{"question": "question text", "choices": ["A) ...", "B) ...", "C) ...", "D) ..."], "answer": "A", "explanation": "why this is correct"}],
-  "examQuestions": ["open-ended exam question"]
-}
+  if (
+    mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mimetype === "application/msword"
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mammoth = require("mammoth");
+    const result = await mammoth.extractRawText({ buffer });
+    return (result.value as string).trim();
+  }
 
-Requirements: 8-12 keyConcepts, 10-15 flashcards, 8-10 quiz questions, 5-8 exam questions.`;
+  if (
+    mimetype === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    mimetype === "application/vnd.ms-powerpoint"
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const JSZip = require("jszip");
+    const zip = await (JSZip as { loadAsync: (b: Buffer) => Promise<{ files: Record<string, { async: (t: string) => Promise<string> }> }> }).loadAsync(buffer);
+    const texts: string[] = [];
+    for (const filename of Object.keys(zip.files)) {
+      if (/^ppt\/slides\/slide\d+\.xml$/.test(filename)) {
+        const xml = await zip.files[filename].async("text");
+        const matches = xml.match(/<a:t(?:\s[^>]*)?>([^<]*)<\/a:t>/g) ?? [];
+        texts.push(...matches.map((t: string) => t.replace(/<[^>]+>/g, "").trim()).filter(Boolean));
+      }
+    }
+    return texts.join("\n").trim();
+  }
+
+  return "";
 }
 
 function parseGeminiJson(raw: string) {
@@ -175,18 +188,21 @@ router.post(
 
       if (file) {
         resolvedTopic = file.originalname.replace(/\.[^/.]+$/, "");
-        const mimeType = file.mimetype;
-        if (mimeType === "application/pdf") {
+        if (file.mimetype === "application/pdf") {
           parts = [
-            { inlineData: { data: file.buffer.toString("base64"), mimeType } },
-            { text: buildFilePrompt(file.originalname) },
+            { inlineData: { data: file.buffer.toString("base64"), mimeType: file.mimetype } },
+            { text: buildPrompt(`Analyze this PDF document "${file.originalname}" and`) },
           ];
         } else {
-          parts = [{ text: buildTopicPrompt(resolvedTopic) }];
+          const extracted = await extractTextFromBuffer(file.buffer, file.mimetype);
+          const source = extracted
+            ? `Based on this document content from "${file.originalname}":\n\n${extracted.slice(0, 12000)}`
+            : `Topic: ${resolvedTopic}`;
+          parts = [{ text: buildPrompt(source) }];
         }
       } else {
         resolvedTopic = topic!;
-        parts = [{ text: buildTopicPrompt(resolvedTopic) }];
+        parts = [{ text: buildPrompt(`Topic: ${resolvedTopic}`) }];
       }
 
       const rawText = await callGemini(parts);
