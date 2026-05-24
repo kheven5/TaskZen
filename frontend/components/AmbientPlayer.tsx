@@ -79,8 +79,9 @@ export function AmbientPlayer() {
   }, []);
 
   return (
-    /* Fixed bottom bar — sits above everything, persists across all tab navigations */
     <div className="fixed bottom-0 left-0 lg:left-16 right-0 z-40">
+
+      {/* ── Collapsible panel: genre links + URL input only (no iframe) ── */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -133,47 +134,34 @@ export function AmbientPlayer() {
                 </button>
               </div>
 
-              {/* Embedded player */}
+              {/* Volume controls — always accessible even when iframe is hidden */}
               {activeEmbed && (
-                <div className="space-y-2.5">
-                  <iframe
-                    key={activeEmbed.id}
-                    ref={iframeRef}
-                    src={buildEmbedUrl(activeEmbed)}
-                    onLoad={handleIframeReady}
-                    allow="autoplay; encrypted-media"
-                    allowFullScreen
-                    className="w-full rounded-xl border border-border h-[160px]"
-                    title="YouTube music player"
+                <div className="flex items-center gap-3">
+                  <button
+                    aria-label={isPlaying ? "Pause" : "Play"}
+                    onClick={togglePlay}
+                    className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors shrink-0"
+                  >
+                    {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                  </button>
+                  <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                  <input
+                    type="range"
+                    aria-label="Volume"
+                    min={0}
+                    max={100}
+                    value={volume}
+                    onChange={handleVolume}
+                    className="flex-1 h-1.5 accent-primary cursor-pointer"
                   />
-                  {/* Playback controls */}
-                  <div className="flex items-center gap-3">
-                    <button
-                      aria-label={isPlaying ? "Pause" : "Play"}
-                      onClick={togglePlay}
-                      className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors shrink-0"
-                    >
-                      {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                    </button>
-                    <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
-                    <input
-                      type="range"
-                      aria-label="Volume"
-                      min={0}
-                      max={100}
-                      value={volume}
-                      onChange={handleVolume}
-                      className="flex-1 h-1.5 accent-primary cursor-pointer"
-                    />
-                    <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
-                    <button
-                      aria-label="Stop"
-                      onClick={handleStop}
-                      className="w-7 h-7 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
+                  <button
+                    aria-label="Stop"
+                    onClick={handleStop}
+                    className="w-7 h-7 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </div>
               )}
             </div>
@@ -181,7 +169,31 @@ export function AmbientPlayer() {
         )}
       </AnimatePresence>
 
-      {/* Always-visible bottom bar */}
+      {/* ── iframe: always mounted in DOM when active so audio never stops ──
+           CSS show/hide (not unmount) keeps YouTube playing while minimized   */}
+      {activeEmbed && (
+        <div
+          className={cn(
+            "border-t border-border bg-card/95 backdrop-blur-md overflow-hidden transition-all duration-220",
+            expanded ? "block" : "hidden"
+          )}
+        >
+          <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3">
+            <iframe
+              key={activeEmbed.id}
+              ref={iframeRef}
+              src={buildEmbedUrl(activeEmbed)}
+              onLoad={handleIframeReady}
+              allow="autoplay; encrypted-media"
+              allowFullScreen
+              className="w-full rounded-xl border border-border h-[160px]"
+              title="YouTube music player"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Always-visible bottom bar ── */}
       <div className="border-t border-border bg-card/95 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 lg:px-6">
           <div className="flex items-center h-11 gap-3">
@@ -199,7 +211,7 @@ export function AmbientPlayer() {
               </div>
               <span className="text-xs font-semibold text-foreground">Music Player</span>
               <span className="text-[11px] text-muted-foreground truncate hidden sm:block">
-                {isPlaying ? "▶ Playing from YouTube" : "· Paste a YouTube link to play"}
+                {isPlaying ? "▶ Playing — minimized keeps audio on" : "· Paste a YouTube link to play"}
               </span>
             </button>
 

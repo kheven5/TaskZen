@@ -89,17 +89,9 @@ export async function POST(req: NextRequest) {
   try {
     const result = await callGemini(apiKey, body);
 
-<<<<<<< Updated upstream
     if (result.ok) {
       return NextResponse.json({ content: result.text });
     }
-=======
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: SYSTEM_PROMPT,
-    });
->>>>>>> Stashed changes
 
     if (result.status === 429) {
       return NextResponse.json(

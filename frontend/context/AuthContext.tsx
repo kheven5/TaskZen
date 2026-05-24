@@ -11,6 +11,7 @@ import {
   authLogin,
   authSignup,
   authLogout,
+  verifyEmail as apiVerifyEmail,
   type AuthUser,
 } from "@/lib/auth";
 
@@ -18,7 +19,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
-  signup: (username: string, email: string, password: string) => Promise<void>;
+  signup: (username: string, email: string, password: string) => Promise<{ email: string }>;
+  verifyEmail: (email: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -44,7 +46,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signup = useCallback(
     async (username: string, email: string, password: string) => {
-      const authedUser = await authSignup(username, email, password);
+      return authSignup(username, email, password);
+    },
+    []
+  );
+
+  const verifyEmail = useCallback(
+    async (email: string, otp: string) => {
+      const authedUser = await apiVerifyEmail(email, otp);
       setUser(authedUser);
     },
     []
@@ -52,7 +61,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await authLogout();
-    // Clear all stale local data so next login starts fresh
     if (typeof window !== "undefined") {
       ["taskzen_profile", "taskzen_todos", "taskzen_notes", "timerSettings",
        "taskzen_weekly_goal", "focusai_session", "focusai_users",
@@ -63,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, verifyEmail, logout }}>
       {children}
     </AuthContext.Provider>
   );

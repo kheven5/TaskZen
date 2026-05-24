@@ -59,7 +59,12 @@ export default function LoginPage() {
       await login(email.trim(), password, rememberMe);
       router.replace("/dashboard");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      const e = err as Error & { code?: string; email?: string };
+      if (e.code === "EMAIL_NOT_VERIFIED") {
+        router.push(`/verify-email?email=${encodeURIComponent(e.email ?? email.trim())}`);
+        return;
+      }
+      setError(e.message ?? "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -245,14 +250,13 @@ export default function LoginPage() {
                 <label htmlFor="password" className="label-xs" style={{ textTransform: "none", letterSpacing: "0.04em" }}>
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setError("Password reset is not available in demo mode.")}
+                <Link
+                  href="/forgot-password"
                   className="text-muted-foreground hover:text-foreground transition-colors"
                   style={{ fontSize: "0.6rem", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "Arial, sans-serif" }}
                 >
                   Forgot?
-                </button>
+                </Link>
               </div>
               <div className="relative">
                 <Input

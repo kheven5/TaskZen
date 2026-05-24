@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Library, Sparkles, Upload, X, FileText, Search, Bookmark, BookmarkCheck,
   Trash2, ChevronLeft, RotateCcw, CheckCircle2, XCircle, FileQuestion,
-  Layers, Brain, BookOpen, ClipboardList, Lightbulb, ArrowRight, Clock,
+  Layers, Brain, ClipboardList, Lightbulb, ArrowRight, Clock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ import {
 
 type MainTab = "generate" | "library";
 type GeneratorMode = "topic" | "file";
-type ViewerTab = "summary" | "notes" | "concepts" | "flashcards" | "quiz" | "exam";
+type ViewerTab = "summary" | "concepts" | "flashcards" | "quiz" | "exam";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -493,7 +493,6 @@ function ReviewerViewer({
 
   const tabs: { id: ViewerTab; label: string; icon: React.ElementType; count?: number }[] = [
     { id: "summary", label: "Summary", icon: Lightbulb },
-    { id: "notes", label: "Study Notes", icon: BookOpen },
     { id: "concepts", label: "Key Concepts", icon: Brain, count: concepts.length },
     { id: "flashcards", label: "Flashcards", icon: Layers, count: flashcards.length },
     { id: "quiz", label: "Quiz", icon: ClipboardList, count: quizzes.length },
@@ -596,19 +595,6 @@ function ReviewerViewer({
                       <p className="text-xs mt-0.5 font-medium opacity-80">{s.label}</p>
                     </div>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Study Notes */}
-          {activeTab === "notes" && (
-            <Card>
-              <CardContent className="p-6">
-                <div className="prose prose-sm max-w-none space-y-1">
-                  {reviewer.reviewerContent
-                    ? renderNotes(reviewer.reviewerContent)
-                    : <p className="text-muted-foreground text-sm">No study notes available.</p>}
                 </div>
               </CardContent>
             </Card>
@@ -988,7 +974,7 @@ export function ReviewerLibrary() {
 
                   {/* Tip */}
                   <p className="text-xs text-center text-muted-foreground">
-                    AI will generate a summary, study notes, key concepts, flashcards, a quiz, and exam questions.
+                    AI will generate a summary, key concepts, flashcards, a quiz, and exam questions.
                   </p>
                 </CardContent>
               </Card>

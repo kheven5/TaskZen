@@ -21,6 +21,7 @@ import { ReviewerLibrary } from "@/components/ReviewerLibrary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { TimerProvider, useTimerContext } from "@/context/TimerContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTaskNotifications } from "@/hooks/useTaskNotifications";
@@ -30,7 +31,7 @@ import { getStats, getProfile, getTasks, saveGamification, type UserStats, type 
 import { cn, formatMinutes } from "@/lib/utils";
 import {
   BookOpen, Zap, GraduationCap,
-  Lightbulb, Calendar, CheckCircle2, BarChart3, Trophy, Library
+  Lightbulb, Calendar, CheckCircle2, BarChart3, Trophy, Library, KeyRound
 } from "lucide-react";
 
 const pageVariants = {
@@ -45,6 +46,95 @@ const EMPTY_STATS: UserStats = {
   todaySessions: 0, todayMinutes: 0,
   weeklyProgress: 0, weeklyGoal: 600,
 };
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+
+function ChangePasswordCard() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setStatus("error");
+      setMessage("New passwords do not match");
+      return;
+    }
+    setStatus("loading");
+    try {
+      const res = await fetch(`${API}/api/auth/change-password`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to change password");
+      setStatus("success");
+      setMessage("Password changed successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setStatus("error");
+      setMessage(err instanceof Error ? err.message : "Something went wrong");
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <KeyRound className="h-4 w-4 text-primary" />
+          <h3 className="font-semibold">Change Password</h3>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-3 max-w-sm">
+          <div>
+            <label className="text-sm text-muted-foreground mb-1 block">Current Password</label>
+            <Input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Enter current password"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-sm text-muted-foreground mb-1 block">New Password</label>
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-sm text-muted-foreground mb-1 block">Confirm New Password</label>
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repeat new password"
+              required
+            />
+          </div>
+          {message && (
+            <p className={`text-sm ${status === "success" ? "text-green-500" : "text-destructive"}`}>
+              {message}
+            </p>
+          )}
+          <Button type="submit" disabled={status === "loading"} className="gradient-blue text-white">
+            {status === "loading" ? "Saving..." : "Update Password"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
 function DashboardOverview({ onNavigate, stats }: { onNavigate: (tab: string) => void; stats: UserStats }) {
   const quickStats = [
@@ -402,28 +492,32 @@ function DashboardContent() {
             {activeTab === "settings" && (
               <motion.div key="settings" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
                 <h2 className="text-xl font-bold mb-4">Settings</h2>
-                <Card>
-                  <CardContent className="p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-semibold">Timer Configuration</h3>
-                        <p className="text-sm text-muted-foreground">Customize your Pomodoro durations and behavior</p>
+                <div className="space-y-4">
+                  <Card>
+                    <CardContent className="p-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold">Timer Configuration</h3>
+                          <p className="text-sm text-muted-foreground">Customize your Pomodoro durations and behavior</p>
+                        </div>
+                        <SettingsModal settings={settings} onSave={updateSettings} />
                       </div>
-                      <SettingsModal settings={settings} onSave={updateSettings} />
-                    </div>
-                    <div className="border-t border-border pt-4">
-                      <h3 className="font-semibold mb-1">Current Settings</h3>
-                      <div className="grid sm:grid-cols-2 gap-3 text-sm text-muted-foreground">
-                        <div>Focus Duration: <span className="text-foreground font-medium">{settings.focusDuration} min</span></div>
-                        <div>Short Break: <span className="text-foreground font-medium">{settings.shortBreakDuration} min</span></div>
-                        <div>Long Break: <span className="text-foreground font-medium">{settings.longBreakDuration} min</span></div>
-                        <div>Long Break Every: <span className="text-foreground font-medium">{settings.longBreakInterval} sessions</span></div>
-                        <div>Sound: <span className="text-foreground font-medium">{settings.soundEnabled ? "On" : "Off"}</span></div>
-                        <div>Auto-start Breaks: <span className="text-foreground font-medium">{settings.autoStartBreaks ? "On" : "Off"}</span></div>
+                      <div className="border-t border-border pt-4">
+                        <h3 className="font-semibold mb-1">Current Settings</h3>
+                        <div className="grid sm:grid-cols-2 gap-3 text-sm text-muted-foreground">
+                          <div>Focus Duration: <span className="text-foreground font-medium">{settings.focusDuration} min</span></div>
+                          <div>Short Break: <span className="text-foreground font-medium">{settings.shortBreakDuration} min</span></div>
+                          <div>Long Break: <span className="text-foreground font-medium">{settings.longBreakDuration} min</span></div>
+                          <div>Long Break Every: <span className="text-foreground font-medium">{settings.longBreakInterval} sessions</span></div>
+                          <div>Sound: <span className="text-foreground font-medium">{settings.soundEnabled ? "On" : "Off"}</span></div>
+                          <div>Auto-start Breaks: <span className="text-foreground font-medium">{settings.autoStartBreaks ? "On" : "Off"}</span></div>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+
+                  <ChangePasswordCard />
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

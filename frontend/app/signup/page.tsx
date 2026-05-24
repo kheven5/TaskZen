@@ -84,8 +84,8 @@ export default function SignupPage() {
     if (!agreedToTerms) { setError("Please agree to the Terms of Service to continue."); return; }
     setSubmitting(true);
     try {
-      await signup(username.trim(), email.trim(), password);
-      router.replace("/dashboard");
+      const { email: confirmedEmail } = await signup(username.trim(), email.trim(), password);
+      router.replace(`/verify-email?email=${encodeURIComponent(confirmedEmail)}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {

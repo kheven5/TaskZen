@@ -31,7 +31,7 @@ passport.use(
             // Link the Google ID to the existing account
             user = await prisma.user.update({
               where: { id: user.id },
-              data: { googleId },
+              data: { googleId, isVerified: true },
             });
             console.log(`[Auth] Linked googleId to existing user ${user.id}`);
           } else {
@@ -39,7 +39,7 @@ passport.use(
             const rawName = profile.displayName ?? email.split("@")[0];
             const username = rawName.replace(/\s+/g, "").slice(0, 30) || "user";
             user = await prisma.user.create({
-              data: { email, googleId, username, password: null },
+              data: { email, googleId, username, password: null, isVerified: true },
             });
             console.log(`[Auth] Created new user ${user.id} for email ${email}`);
           }
