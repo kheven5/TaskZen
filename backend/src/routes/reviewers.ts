@@ -8,10 +8,29 @@ import { prisma } from "../lib/prisma";
 const router = Router();
 router.use(requireAuth as RequestHandler);
 
+const MAX_UPLOAD_MB = 30;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
 });
+
+// Runs multer but converts its errors (e.g. file-too-large) into clean JSON
+// responses instead of letting them bubble up as a generic 500.
+function uploadSingle(field: string): RequestHandler {
+  const mw = upload.single(field);
+  return (req, res, next) => {
+    mw(req, res, (err: unknown) => {
+      if (!err) return next();
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({ error: `File is too large. Maximum size is ${MAX_UPLOAD_MB} MB.` });
+        return;
+      }
+      console.error("[reviewers/upload]", err);
+      res.status(400).json({ error: "Could not read the uploaded file. Please try a different file." });
+    });
+  };
+}
 
 // Wraps AuthRequest handlers so TypeScript's overload resolver is satisfied
 function h(fn: (req: AuthRequest, res: Response) => Promise<void>): RequestHandler {
@@ -125,7 +144,22 @@ Requirements: 6-8 keyConcepts, 8-10 flashcards, 5-6 quiz questions (A/B/C/D), 4-
 }
 
 async function extractTextFromBuffer(buffer: Buffer, mimetype: string): Promise<string> {
-  if (mimetype === "application/pdf") return "";
+  if (mimetype === "application/pdf") {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PDFParse } = require("pdf-parse") as {
+      PDFParse: new (opts: { data: Uint8Array }) => {
+        getText: () => Promise<{ text: string }>;
+        destroy: () => Promise<void>;
+      };
+    };
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      const result = await parser.getText();
+      return (result.text ?? "").trim();
+    } finally {
+      await parser.destroy().catch(() => {});
+    }
+  }
 
   if (
     mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -171,7 +205,7 @@ function parseGeminiJson(raw: string) {
 // POST /api/reviewers/generate
 router.post(
   "/generate",
-  upload.single("file") as RequestHandler,
+  uploadSingle("file"),
   h(async (req, res) => {
     const userId = req.user!.userId;
     const topic = req.body?.topic as string | undefined;
@@ -188,17 +222,20 @@ router.post(
 
       if (file) {
         resolvedTopic = file.originalname.replace(/\.[^/.]+$/, "");
-        if (file.mimetype === "application/pdf") {
+        const extracted = await extractTextFromBuffer(file.buffer, file.mimetype).catch(() => "");
+
+        if (extracted.length >= 40) {
+          // We successfully pulled real text out of the document — best/cheapest path.
+          parts = [{ text: buildPrompt(`Based on this document content from "${file.originalname}":\n\n${extracted.slice(0, 12000)}`) }];
+        } else if (file.mimetype === "application/pdf") {
+          // Scanned / image-only PDF with no embedded text — let Gemini read it natively.
           parts = [
             { inlineData: { data: file.buffer.toString("base64"), mimeType: file.mimetype } },
             { text: buildPrompt(`Analyze this PDF document "${file.originalname}" and`) },
           ];
         } else {
-          const extracted = await extractTextFromBuffer(file.buffer, file.mimetype);
-          const source = extracted
-            ? `Based on this document content from "${file.originalname}":\n\n${extracted.slice(0, 12000)}`
-            : `Topic: ${resolvedTopic}`;
-          parts = [{ text: buildPrompt(source) }];
+          // Unsupported/empty document — fall back to treating the filename as the topic.
+          parts = [{ text: buildPrompt(`Topic: ${resolvedTopic}`) }];
         }
       } else {
         resolvedTopic = topic!;

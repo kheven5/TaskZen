@@ -1,8 +1,10 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Music2, Volume2, VolumeX, Play, Pause, ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
+import { Music2, Volume2, VolumeX, Play, Pause, ChevronDown, ExternalLink, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const SPOTIFY_GREEN = "#1DB954";
 
 const PRESETS = [
   { label: "Lo-fi",     emoji: "🎵", query: "lofi hip hop study music" },
@@ -35,13 +37,38 @@ function buildEmbedUrl(parsed: { type: "video" | "playlist"; id: string }): stri
   return `https://www.youtube-nocookie.com/embed/${parsed.id}?${base}`;
 }
 
-export function AmbientPlayer() {
-  const [expanded, setExpanded] = useState(false);
+interface AmbientPlayerProps {
+  /** Controlled open state — toggled from the sidebar music button. */
+  expanded: boolean;
+  onExpandedChange: (v: boolean) => void;
+  /** Reports playback state up so the sidebar button can show a "playing" pulse. */
+  onPlayingChange?: (playing: boolean) => void;
+}
+
+function EqualizerBars() {
+  return (
+    <div className="flex gap-0.5 items-end h-4 shrink-0">
+      {[0.6, 1, 0.75, 0.9, 0.55].map((h, i) => (
+        <motion.div
+          key={i}
+          className="w-0.5 rounded-full"
+          style={{ height: "100%", transformOrigin: "bottom", backgroundColor: SPOTIFY_GREEN }}
+          animate={{ scaleY: [h, 1, h * 0.6, 1, h] }}
+          transition={{ repeat: Infinity, duration: 1.1 + i * 0.18, ease: "easeInOut" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function AmbientPlayer({ expanded, onExpandedChange, onPlayingChange }: AmbientPlayerProps) {
   const [inputUrl, setInputUrl] = useState("");
   const [activeEmbed, setActiveEmbed] = useState<{ type: "video" | "playlist"; id: string } | null>(null);
   const [volume, setVolume] = useState(50);
   const [isPlaying, setIsPlaying] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => { onPlayingChange?.(isPlaying); }, [isPlaying, onPlayingChange]);
 
   const postCmd = useCallback((func: string, args?: unknown[]) => {
     const msg = JSON.stringify({ event: "command", func, args: args ?? [] });
@@ -79,23 +106,112 @@ export function AmbientPlayer() {
   }, []);
 
   return (
-    <div className="fixed bottom-0 left-0 lg:left-16 right-0 z-40">
+    <>
+      {/* Persistent off-screen audio host — kept mounted whenever something is loaded so
+          closing the popover (or switching tabs) never stops the music. */}
+      {activeEmbed && (
+        <div aria-hidden className="fixed left-[-9999px] top-0 w-[320px] h-[180px] pointer-events-none">
+          <iframe
+            key={activeEmbed.id}
+            ref={iframeRef}
+            src={buildEmbedUrl(activeEmbed)}
+            onLoad={handleIframeReady}
+            allow="autoplay; encrypted-media"
+            title="Focus music audio"
+            className="w-full h-full"
+          />
+        </div>
+      )}
 
-      {/* ── Collapsible panel: genre links + URL input only (no iframe) ── */}
+      {/* Floating Spotify-style popover (opens from the sidebar music button) */}
       <AnimatePresence>
         {expanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: "easeInOut" }}
-            className="overflow-hidden border-t border-border bg-card/95 backdrop-blur-md"
+            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="fixed z-50 bottom-4 left-4 lg:left-20 w-[330px] max-w-[calc(100vw-2rem)]"
           >
-            <div className="max-w-7xl mx-auto px-4 lg:px-6 py-4 space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-[#181818] text-neutral-200 shadow-2xl overflow-hidden">
+
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 pt-3 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <Music2 className="h-3.5 w-3.5 text-[#1DB954]" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#1DB954]">Focus Music</span>
+                </div>
+                <button
+                  onClick={() => onExpandedChange(false)}
+                  aria-label="Close player"
+                  className="p-1 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Now-playing row */}
+              <div className="flex items-center gap-3 px-4 pb-3">
+                <div className={cn(
+                  "w-12 h-12 rounded-lg flex items-center justify-center shrink-0 shadow-md",
+                  isPlaying
+                    ? "bg-gradient-to-br from-[#1DB954] to-[#1ed760] text-black"
+                    : "bg-gradient-to-br from-neutral-700 to-neutral-800 text-neutral-300",
+                )}>
+                  <Music2 className="h-6 w-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-white truncate">
+                    {activeEmbed ? "Now playing" : "Nothing playing"}
+                  </p>
+                  <p className="text-[11px] text-neutral-400 truncate">
+                    {isPlaying ? "Playing · keeps going when closed" : activeEmbed ? "Paused" : "Pick a vibe or paste a link"}
+                  </p>
+                </div>
+                {isPlaying && <EqualizerBars />}
+                {activeEmbed && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      aria-label={isPlaying ? "Pause" : "Play"}
+                      onClick={togglePlay}
+                      className="w-9 h-9 rounded-full bg-[#1DB954] text-black flex items-center justify-center hover:scale-105 transition-transform"
+                    >
+                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
+                    </button>
+                    <button
+                      aria-label="Stop"
+                      onClick={handleStop}
+                      className="w-8 h-8 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white flex items-center justify-center transition-colors"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Volume (only when something is loaded) */}
+              {activeEmbed && (
+                <div className="flex items-center gap-2.5 px-4 pb-3">
+                  <VolumeX className="h-3.5 w-3.5 text-neutral-400 shrink-0" aria-hidden="true" />
+                  <input
+                    type="range"
+                    aria-label="Volume"
+                    min={0}
+                    max={100}
+                    value={volume}
+                    onChange={handleVolume}
+                    className="flex-1 h-1.5 cursor-pointer"
+                    style={{ accentColor: SPOTIFY_GREEN }}
+                  />
+                  <Volume2 className="h-3.5 w-3.5 text-neutral-400 shrink-0" aria-hidden="true" />
+                </div>
+              )}
+
+              <div className="border-t border-white/10" />
 
               {/* Genre quick-links */}
-              <div>
-                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1.5">
+              <div className="px-4 pt-3">
+                <p className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider mb-1.5">
                   Find on YouTube
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -105,164 +221,38 @@ export function AmbientPlayer() {
                       href={`https://www.youtube.com/results?search_query=${encodeURIComponent(p.query)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-muted/60 hover:bg-muted text-[10px] font-medium text-foreground transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/10 hover:bg-white/20 text-[10px] font-medium text-neutral-100 transition-colors"
                     >
                       <span>{p.emoji}</span>
                       {p.label}
-                      <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
+                      <ExternalLink className="h-2.5 w-2.5 text-neutral-400" />
                     </a>
                   ))}
                 </div>
               </div>
 
-              {/* URL input row */}
-              <div className="flex gap-2">
+              {/* URL input */}
+              <div className="flex gap-2 px-4 py-3">
                 <input
                   type="text"
-                  placeholder="Paste YouTube URL or video ID…"
+                  placeholder="Paste a YouTube link or video ID…"
                   value={inputUrl}
                   onChange={e => setInputUrl(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && handleLoad()}
-                  className="flex-1 h-8 px-3 text-xs rounded-lg bg-muted/50 border border-border focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+                  className="flex-1 h-9 px-3 text-xs rounded-full bg-white/10 border border-white/10 text-neutral-100 focus:outline-none focus:ring-1 focus:ring-[#1DB954] placeholder:text-neutral-500"
                 />
                 <button
                   onClick={handleLoad}
                   disabled={!inputUrl.trim()}
-                  className="h-8 px-3 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="h-9 px-5 text-xs font-bold rounded-full bg-[#1DB954] text-black hover:scale-105 disabled:opacity-40 disabled:hover:scale-100 transition-transform"
                 >
                   Play
                 </button>
               </div>
-
-              {/* Volume controls — always accessible even when iframe is hidden */}
-              {activeEmbed && (
-                <div className="flex items-center gap-3">
-                  <button
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                    onClick={togglePlay}
-                    className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors shrink-0"
-                  >
-                    {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-                  </button>
-                  <VolumeX className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
-                  <input
-                    type="range"
-                    aria-label="Volume"
-                    min={0}
-                    max={100}
-                    value={volume}
-                    onChange={handleVolume}
-                    className="flex-1 h-1.5 accent-primary cursor-pointer"
-                  />
-                  <Volume2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" aria-hidden="true" />
-                  <button
-                    aria-label="Stop"
-                    onClick={handleStop}
-                    className="w-7 h-7 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors shrink-0"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* ── iframe: always mounted in DOM when active so audio never stops ──
-           CSS show/hide (not unmount) keeps YouTube playing while minimized   */}
-      {activeEmbed && (
-        <div
-          className={cn(
-            "border-t border-border bg-card/95 backdrop-blur-md overflow-hidden transition-all duration-220",
-            expanded ? "block" : "hidden"
-          )}
-        >
-          <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3">
-            <iframe
-              key={activeEmbed.id}
-              ref={iframeRef}
-              src={buildEmbedUrl(activeEmbed)}
-              onLoad={handleIframeReady}
-              allow="autoplay; encrypted-media"
-              allowFullScreen
-              className="w-full rounded-xl border border-border h-[160px]"
-              title="YouTube music player"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ── Always-visible bottom bar ── */}
-      <div className="border-t border-border bg-card/95 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6">
-          <div className="flex items-center h-11 gap-3">
-
-            {/* Icon + label */}
-            <button
-              onClick={() => setExpanded(p => !p)}
-              className="flex items-center gap-2 min-w-0 flex-1 hover:opacity-80 transition-opacity"
-            >
-              <div className={cn(
-                "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-all",
-                isPlaying ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground",
-              )}>
-                {isPlaying ? <Volume2 className="h-3 w-3" /> : <Music2 className="h-3 w-3" />}
-              </div>
-              <span className="text-xs font-semibold text-foreground">Music Player</span>
-              <span className="text-[11px] text-muted-foreground truncate hidden sm:block">
-                {isPlaying ? "▶ Playing — minimized keeps audio on" : "· Paste a YouTube link to play"}
-              </span>
-            </button>
-
-            {/* Playing indicator bars */}
-            {isPlaying && (
-              <div className="flex gap-0.5 items-end h-3.5 shrink-0">
-                {[0.6, 1, 0.75, 0.9, 0.55].map((h, i) => (
-                  <motion.div
-                    key={i}
-                    className="w-0.5 bg-primary rounded-full"
-                    animate={{ scaleY: [h, 1, h * 0.6, 1, h] }}
-                    transition={{ repeat: Infinity, duration: 1.1 + i * 0.18, ease: "easeInOut" }}
-                    style={{ height: "100%", transformOrigin: "bottom", scaleY: h }}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Inline quick controls when playing */}
-            {isPlaying && activeEmbed && (
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  aria-label={isPlaying ? "Pause" : "Play"}
-                  onClick={togglePlay}
-                  className="w-6 h-6 rounded-md bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center transition-colors"
-                >
-                  {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
-                </button>
-                <button
-                  aria-label="Stop"
-                  onClick={handleStop}
-                  className="w-6 h-6 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-
-            {/* Expand/collapse chevron */}
-            <button
-              aria-label={expanded ? "Collapse player" : "Expand player"}
-              onClick={() => setExpanded(p => !p)}
-              className="p-1 rounded-md hover:bg-accent/10 text-muted-foreground transition-colors shrink-0"
-            >
-              {expanded
-                ? <ChevronDown className="h-3.5 w-3.5" />
-                : <ChevronUp className="h-3.5 w-3.5" />}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+    </>
   );
 }

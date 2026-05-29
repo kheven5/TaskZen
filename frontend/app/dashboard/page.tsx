@@ -26,6 +26,7 @@ import { TimerProvider, useTimerContext } from "@/context/TimerContext";
 import { useAuth } from "@/context/AuthContext";
 import { useTaskNotifications } from "@/hooks/useTaskNotifications";
 import { usePageVisibility } from "@/hooks/usePageVisibility";
+import { ensureNotificationPermission, sendNotification } from "@/lib/notify";
 import { useFocusGame } from "@/store/useFocusGame";
 import { getStats, getProfile, getTasks, saveGamification, type UserStats, type WeeklyDataPoint, type Task } from "@/lib/api";
 import { cn, formatMinutes } from "@/lib/utils";
@@ -259,6 +260,8 @@ function DashboardContent() {
     return "dashboard";
   });
   const [focusModeActive, setFocusModeActive] = useState(false);
+  const [musicOpen, setMusicOpen] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
 
   // Real data from API
   const [stats, setStats] = useState<UserStats>(EMPTY_STATS);
@@ -277,6 +280,9 @@ function DashboardContent() {
 
   // Fetch stats, profile, and tasks on mount
   useEffect(() => {
+    // Ask for OS notification permission early so the alt-tab "stay focused" alert can fire.
+    ensureNotificationPermission();
+
     getStats()
       .then(({ stats: s, weeklyData: w }) => {
         setStats(s);
@@ -308,17 +314,27 @@ function DashboardContent() {
       if (!sessionStartedRef.current) {
         sessionStartedRef.current = true;
         focusGame.startSession();
+        // Ask once (on a real user gesture — pressing start) so the away-alert can fire later.
+        ensureNotificationPermission();
       }
     } else if (status === "idle") {
       sessionStartedRef.current = false;
     }
   }, [status, mode, focusGame]);
 
-  // Distraction detection via Page Visibility API
-  usePageVisibility(
-    () => focusGame.recordDistraction(),
-    focusGame.isSessionActive
-  );
+  // Distraction detection via the Page Visibility API.
+  // When the user alt-tabs / switches away for 10s while a focus session is running,
+  // record the distraction (in-app warning on return) AND fire a system notification
+  // that floats over whatever window they switched to.
+  const handleDistraction = useCallback(() => {
+    focusGame.recordDistraction();
+    sendNotification("⏰ Stay focused!", {
+      body: "You've been away for 10 seconds — your focus session is still running. Click to return.",
+      tag: "taskzen-distraction",
+    });
+  }, [focusGame]);
+
+  usePageVisibility(handleDistraction, focusGame.isSessionActive, 10000);
 
   // Refresh stats + award XP when a session completes
   useEffect(() => {
@@ -392,7 +408,13 @@ function DashboardContent() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        musicOpen={musicOpen}
+        musicPlaying={musicPlaying}
+        onToggleMusic={() => setMusicOpen((o) => !o)}
+      />
 
       <div className="flex-1 flex flex-col lg:ml-16 min-w-0">
         <Header
@@ -405,7 +427,7 @@ function DashboardContent() {
           onLogout={logout}
         />
 
-        <main className="flex-1 p-4 pb-16 lg:p-6 lg:pb-16 max-w-7xl mx-auto w-full">
+        <main className="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full">
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div key="dashboard" variants={pageVariants} initial="initial" animate="animate" exit="exit" transition={{ duration: 0.25 }}>
@@ -536,7 +558,7 @@ function DashboardContent() {
         show={focusGame.showWarning}
         warningCount={focusGame.warningCount}
         distractions={focusGame.sessionDistractions}
-        onReturn={focusGame.dismissWarning}
+        onReturn={() => { focusGame.dismissWarning(); handleTabChange("timer"); }}
         onEndSession={() => { focusGame.dismissWarning(); }}
       />
 
@@ -547,8 +569,9 @@ function DashboardContent() {
         onClose={focusGame.dismissCompletion}
       />
 
-      {/* Persistent music player — always mounted so music never stops on tab change */}
-      <AmbientPlayer />
+      {/* Persistent music player — always mounted so music never stops on tab change.
+          Opens as a floating popover from the sidebar music button (no bottom bar). */}
+      <AmbientPlayer expanded={musicOpen} onExpandedChange={setMusicOpen} onPlayingChange={setMusicPlaying} />
 
       <AnimatePresence>
         {focusModeActive && (

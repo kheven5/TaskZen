@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Camera, Trash2, Pencil, Check, X, Loader2,
@@ -27,6 +27,36 @@ const defaultProfile = (): Profile => ({
   fieldOfStudy: "", yearLevel: "", studentId: "",
   dailyGoal: "", studyTime: "", learningStyle: "",
 });
+
+// Avatars are stored inline (base64) in the DB. A raw phone photo is multiple MB,
+// which makes every profile fetch crawl. Downscale + re-encode to a small thumbnail
+// (~20-40 KB) before saving so the profile loads instantly.
+async function compressAvatarImage(file: File, max = 256, quality = 0.82): Promise<string> {
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const img: HTMLImageElement = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+
+  const scale = Math.min(1, max / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrl; // fall back to the original if canvas is unavailable
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL("image/jpeg", quality);
+}
 
 interface FieldDef {
   key: keyof Profile;
@@ -68,6 +98,7 @@ interface ProfilePageProps {
 export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
   const [profile, setProfile] = useState<Profile>(defaultProfile());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [editing, setEditing] = useState<keyof Profile | null>(null);
   const [draft, setDraft] = useState("");
   const [hovering, setHovering] = useState(false);
@@ -75,8 +106,9 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Load profile from API
-  useEffect(() => {
+  const loadProfile = useCallback(() => {
     setLoading(true);
+    setLoadError(false);
     getProfile()
       .then(({ profile: p, user }) => {
         setProfile({
@@ -92,9 +124,14 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
           learningStyle: p.learningStyle,
         });
       })
-      .catch(console.error)
+      .catch((err) => {
+        console.error("Failed to load profile:", err);
+        setLoadError(true);
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
   const save = async (updated: Profile) => {
     setProfile(updated);
@@ -120,13 +157,19 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
     }
   };
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => save({ ...profile, avatar: reader.result as string });
-    reader.readAsDataURL(file);
     e.target.value = "";
+    if (!file) return;
+    try {
+      const compressed = await compressAvatarImage(file);
+      save({ ...profile, avatar: compressed });
+    } catch (err) {
+      console.error("Avatar compression failed, storing original:", err);
+      const reader = new FileReader();
+      reader.onload = () => save({ ...profile, avatar: reader.result as string });
+      reader.readAsDataURL(file);
+    }
   };
 
   const deleteAvatar = () => save({ ...profile, avatar: "" });
@@ -150,6 +193,26 @@ export function ProfilePage({ username, onProfileChange }: ProfilePageProps) {
     return (
       <div className="flex items-center justify-center py-24">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/10">
+          <X className="h-6 w-6 text-destructive" />
+        </div>
+        <div>
+          <h3 className="font-semibold">Couldn&apos;t load your profile</h3>
+          <p className="mt-0.5 text-sm text-muted-foreground">Check your connection and try again.</p>
+        </div>
+        <button
+          onClick={loadProfile}
+          className="flex items-center gap-1.5 rounded-xl bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-80"
+        >
+          Retry
+        </button>
       </div>
     );
   }

@@ -8,17 +8,27 @@ router.use(requireAuth as RequestHandler);
 router.get("/", h(async (req, res) => {
   const userId = req.user!.userId;
 
-  let profile = await prisma.userProfile.findUnique({ where: { userId } });
-  if (!profile) {
-    profile = await prisma.userProfile.create({ data: { userId } });
+  try {
+    // Fetch the user and its profile in a single round-trip (the profile relation is
+    // included). The profile is only created when it doesn't exist yet, so the common
+    // path is one query rather than the multi-statement upsert.
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, username: true, email: true, profile: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: "User not found." });
+      return;
+    }
+
+    const profile = user.profile ?? (await prisma.userProfile.create({ data: { userId } }));
+
+    res.json({ profile, user: { id: user.id, username: user.username, email: user.email } });
+  } catch (err) {
+    console.error("[profile/get]", err);
+    res.status(500).json({ error: "Failed to load profile." });
   }
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, username: true, email: true },
-  });
-
-  res.json({ profile, user });
 }));
 
 router.put("/", h(async (req, res) => {

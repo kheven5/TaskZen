@@ -23,6 +23,10 @@ type MainTab = "generate" | "library";
 type GeneratorMode = "topic" | "file";
 type ViewerTab = "summary" | "concepts" | "flashcards" | "quiz" | "exam";
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const MAX_FILE_MB = 30;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fileTypeLabel(mime: string | null): string {
@@ -162,7 +166,7 @@ function FileUploadZone({
       </div>
       <div className="text-center">
         <p className="font-medium text-sm">Drop your file here or click to browse</p>
-        <p className="text-xs text-muted-foreground mt-1">Supports PDF, DOCX, PPT, PPTX · Max 15 MB</p>
+        <p className="text-xs text-muted-foreground mt-1">Supports PDF, DOCX, PPT, PPTX · Max {MAX_FILE_MB} MB</p>
       </div>
       <input
         ref={inputRef}
@@ -769,6 +773,16 @@ export function ReviewerLibrary() {
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
   }, [search, fetchReviewers]);
 
+  const handleFileChange = (f: File | null) => {
+    if (f && f.size > MAX_FILE_MB * 1024 * 1024) {
+      setGenError(`That file is ${(f.size / 1024 / 1024).toFixed(1)} MB. Please upload a file under ${MAX_FILE_MB} MB.`);
+      setFile(null);
+      return;
+    }
+    setGenError(null);
+    setFile(f);
+  };
+
   const handleGenerate = async () => {
     if (mode === "topic" && !topic.trim()) return;
     if (mode === "file" && !file) return;
@@ -944,7 +958,7 @@ export function ReviewerLibrary() {
                       <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                         Upload Study Material
                       </label>
-                      <FileUploadZone file={file} onFileChange={setFile} />
+                      <FileUploadZone file={file} onFileChange={handleFileChange} />
                     </div>
                   )}
 

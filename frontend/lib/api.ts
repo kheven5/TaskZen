@@ -1,14 +1,24 @@
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json", ...init?.headers },
-    ...init,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error ?? "Request failed");
-  return data as T;
+async function apiFetch<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${API}${path}`, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...init?.headers },
+      signal: controller.signal,
+      ...init,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data as { error?: string }).error ?? "Request failed");
+    return data as T;
+  } catch (err) {
+    if (controller.signal.aborted) throw new Error("Request timed out. Please try again.");
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function apiFormFetch<T>(path: string, formData: FormData): Promise<T> {
@@ -90,7 +100,8 @@ export interface UserProfile {
 }
 
 export const getProfile = () =>
-  apiFetch<{ profile: UserProfile; user: { id: string; username: string; email: string } }>("/api/user/profile");
+  // Longer timeout: avatars are stored inline and a cold Neon DB can be slow to wake.
+  apiFetch<{ profile: UserProfile; user: { id: string; username: string; email: string } }>("/api/user/profile", undefined, 30000);
 
 export const updateProfile = (data: Partial<Omit<UserProfile, "id" | "userId">>) =>
   apiFetch<{ profile: UserProfile }>("/api/user/profile", { method: "PUT", body: JSON.stringify(data) });

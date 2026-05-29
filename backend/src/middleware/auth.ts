@@ -5,11 +5,18 @@ export interface AuthRequest extends Request {
   user?: JwtPayload;
 }
 
-/** Wraps an AuthRequest handler so Express's overload resolver accepts it. */
+/**
+ * Wraps an AuthRequest handler so Express's overload resolver accepts it, and
+ * forwards any async rejection to the error middleware. Without this, a rejected
+ * promise in an Express 4 route never sends a response and the request hangs
+ * forever (the client spins indefinitely).
+ */
 export function h(
   fn: (req: AuthRequest, res: Response) => Promise<void> | void,
 ): RequestHandler {
-  return fn as unknown as RequestHandler;
+  return ((req, res, next) => {
+    Promise.resolve(fn(req as AuthRequest, res)).catch(next);
+  }) as RequestHandler;
 }
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {

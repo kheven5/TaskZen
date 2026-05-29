@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { Timer, BarChart2, BookOpen, Settings, Zap, Home, ListTodo, UserCircle, Library } from "lucide-react";
+import { Timer, BarChart2, BookOpen, Settings, Home, ListTodo, UserCircle, Library, Music2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeLogo } from "@/components/ThemeLogo";
@@ -8,6 +8,9 @@ import { ThemeLogo } from "@/components/ThemeLogo";
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  musicOpen?: boolean;
+  musicPlaying?: boolean;
+  onToggleMusic?: () => void;
 }
 
 const navItems = [
@@ -20,7 +23,7 @@ const navItems = [
   { id: "profile", icon: UserCircle, label: "Profile" },
 ];
 
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, musicOpen, musicPlaying, onToggleMusic }: SidebarProps) {
   return (
     <TooltipProvider delayDuration={200}>
       <motion.aside
@@ -63,6 +66,30 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             </Tooltip>
           ))}
         </div>
+
+        {/* Music player toggle — Spotify-green accent */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={onToggleMusic}
+              aria-label="Music player"
+              aria-pressed={musicOpen}
+              animate={musicPlaying && !musicOpen ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+              transition={musicPlaying && !musicOpen ? { repeat: Infinity, duration: 1.6, ease: "easeInOut" } : { duration: 0.2 }}
+              className={cn(
+                "relative flex items-center justify-center w-10 h-10 rounded-xl transition-colors duration-200",
+                musicOpen || musicPlaying
+                  ? "bg-[#1DB954] text-black shadow-md"
+                  : "text-muted-foreground hover:bg-[#1DB954]/15 hover:text-[#1DB954]"
+              )}
+            >
+              <Music2 className="h-5 w-5" />
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side="right">{musicPlaying ? "Music · playing" : "Music"}</TooltipContent>
+        </Tooltip>
 
         <Tooltip>
           <TooltipTrigger asChild>

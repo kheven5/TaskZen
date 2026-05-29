@@ -49,6 +49,14 @@ app.use("/api/sessions", sessionsRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/reviewers", reviewersRouter);
 
+// Safety net: ensures any unhandled error in a route returns a response instead of
+// leaving the request hanging (which would make the client spin forever).
+app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[unhandled]", err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: "Internal server error" });
+});
+
 app.listen(PORT, () => {
   console.log(`TaskZen backend running on http://localhost:${PORT}`);
 });
